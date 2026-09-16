@@ -48,12 +48,44 @@ These rules apply to **every task**, not only T-001.
 - Tests must cover important behavior introduced or changed by the task.
 - Build/tests relevant to the changed scope must pass before a task can be closed.
 
+## Angular v14 Architecture & File Responsibility
+
+These architecture rules are part of the Senior Developer standard and apply to **T-001 through T-008**. Separate code by responsibility when the separation improves clarity, reuse, testability, or maintenance. **Do not create extra layers/files only for the sake of having them.** Follow the repository's existing conventions unless they conflict with the requirements below.
+
+- **Components** — own presentation, template interaction, UI events, and lightweight orchestration. Components must not become API/data-access layers or contain large reusable business logic.
+- **Services** — own HTTP/API access, reusable application/business logic, shared state where appropriate, and coordination that does not belong to a single view. API calls must not be scattered directly across presentation components.
+- **Models / Interfaces / Types** — explicitly define API request/response DTO shapes, domain/view models, state, payment types, and error structures where useful. Avoid duplicating the same data shape across files.
+- **Pipes** — use for reusable, presentation-oriented transformations. Prefer pure pipes by default. Do not hide side effects, API calls, or business workflows inside pipes.
+- **Directives** — use for reusable DOM/UI behavior that does not warrant a standalone component. Keep directives focused and avoid embedding unrelated business logic.
+- **HTTP Interceptors** — use for genuinely cross-cutting HTTP concerns such as shared headers, authentication when applicable, correlation/request handling, or normalized transport-level behavior. Do not put feature-specific business decisions in an interceptor.
+- **Route Guards** — use only when route access/navigation rules are required. Guards should coordinate access decisions, not become general-purpose business services.
+- **Modules / Routing** — organize features and routes consistently with Angular v14 and the existing project structure. Preserve clear feature boundaries and avoid unnecessary module fragmentation.
+- **Shared Components** — extract reusable UI only when it has a clear reusable contract. Keep feature-specific UI inside the feature when reuse is not justified.
+- **Utilities / Helpers** — use for small reusable pure functions that do not require Angular dependency injection. Do not turn helpers into hidden state containers.
+- **Constants / Configuration** — keep reusable constants and configuration centralized where appropriate. Environment-dependent values belong in Angular environment/configuration rather than components.
+- **Forms** — use Angular forms consistently with the existing project. Validation rules and error states must be explicit, typed where practical, and not duplicated unnecessarily between template and component logic.
+- **RxJS / Lifecycle** — prefer declarative Observable flows where practical; avoid nested subscriptions and unmanaged subscriptions. Any manual subscription must have a clear lifecycle/unsubscribe strategy compatible with Angular v14.
+- **State** — maintain a clear source of truth for the active sale/payment flow. Do not duplicate mutable state across multiple components/services without a deliberate synchronization design.
+- **Templates** — keep templates declarative and readable. Complex calculations, data mapping, API logic, and non-trivial business rules belong in TypeScript rather than template expressions.
+- **Controller terminology** — Angular does not require a separate MVC-style `Controller` layer for this project. Do not introduce controller files merely to mimic Spring/Express/MVC; UI orchestration belongs in components and reusable/application logic belongs in services or other appropriate Angular constructs.
+
+### Architecture Decision Rule
+
+Before creating a new Component, Service, Pipe, Directive, Guard, Interceptor, Module, model/type file, or helper, ask:
+
+1. Does it have a distinct responsibility?
+2. Will the separation improve readability, reuse, testing, or maintenance?
+3. Is this consistent with the existing Angular v14 project conventions?
+4. Can the same result be achieved more simply without mixing responsibilities?
+
+If separation adds complexity without a clear benefit, keep the implementation simpler. Senior-level architecture means **appropriate separation**, not the maximum number of files.
+
 ## Standard Task Workflow
 
 Each task uses a minimum of **2 prompts**:
 
 1. **Implementation Prompt** — implement the scoped task and run relevant validation/tests.
-2. **Senior Review + Final Gate Prompt** — independently review the implementation against the task acceptance criteria, Angular v14 senior standards, BE contract, tests, and regression risk.
+2. **Senior Review + Final Gate Prompt** — independently review the implementation against the task acceptance criteria, Angular v14 senior standards, architecture/file-responsibility rules, BE contract, tests, and regression risk.
 
 If the review finds issues, fix them and re-run the relevant tests/final gate. Extra prompts are allowed only when needed for fixes or investigation; the default target remains two prompts per task.
 
@@ -95,6 +127,7 @@ Establish and verify the Angular v14 frontend foundation required for the POS im
 - [ ] Project is confirmed to be Angular v14-compatible.
 - [ ] API base configuration is environment-driven.
 - [ ] Core FE structure follows the Senior Developer standards above.
+- [ ] Architecture/file responsibilities follow the Angular v14 Architecture & File Responsibility rules above.
 - [ ] No unnecessary dependency or architecture rewrite is introduced.
 - [ ] Relevant build/tests pass.
 - [ ] Implementation prompt is preserved verbatim.
