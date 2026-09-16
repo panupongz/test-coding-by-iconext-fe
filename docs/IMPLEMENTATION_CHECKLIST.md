@@ -80,6 +80,33 @@ Before creating a new Component, Service, Pipe, Directive, Guard, Interceptor, M
 
 If separation adds complexity without a clear benefit, keep the implementation simpler. Senior-level architecture means **appropriate separation**, not the maximum number of files.
 
+## Conditional Debugging — `debug-mantra`
+
+The project-local skill is located at `.agents/skills/debug-mantra/SKILL.md`. It is a **conditional debugging gate** for every implementation task T-001 through T-008; it is not an extra mandatory prompt when implementation and tests pass normally.
+
+Invoke/apply `debug-mantra` whenever implementation, build, test, runtime, or integration work enters an actual debugging session, including when:
+
+- a build or automated test fails unexpectedly;
+- the application throws a runtime error or displays broken behavior;
+- an API/integration flow fails or returns an unexpected result;
+- the observed behavior does not match the task acceptance criteria and the root cause is not already proven;
+- a first attempted fix fails or the same defect reappears;
+- investigation requires diagnosis rather than a straightforward implementation change.
+
+When triggered, follow `.agents/skills/debug-mantra/SKILL.md` as the Source of Truth for the debugging procedure. In particular, do not guess-and-patch: establish reproducibility, trace the fail path, falsify hypotheses, and cross-reference debugging breadcrumbs before declaring the root cause/fix proven.
+
+A debug session must not bypass the task's normal quality gates. After the issue is fixed, re-run the relevant test/build/reproduction before continuing to Senior Review / Final Gate.
+
+Normal flow:
+
+`Implement → Test → Senior Review / Final Gate → Prompt Audit → Checklist → DONE`
+
+Failure/debug flow:
+
+`Implement → Test/Run fails → debug-mantra → Reproduce → Diagnose → Fix → Re-test → Senior Review / Final Gate → Prompt Audit → Checklist → DONE`
+
+If debugging requires additional prompts, preserve those prompts verbatim under the task's prompt audit. These debugging prompts are conditional and therefore do **not** change the default target of two prompts for a task that passes without debugging.
+
 ## Standard Task Workflow
 
 Each task uses a minimum of **2 prompts**:
@@ -87,11 +114,11 @@ Each task uses a minimum of **2 prompts**:
 1. **Implementation Prompt** — implement the scoped task and run relevant validation/tests.
 2. **Senior Review + Final Gate Prompt** — independently review the implementation against the task acceptance criteria, Angular v14 senior standards, architecture/file-responsibility rules, BE contract, tests, and regression risk.
 
-If the review finds issues, fix them and re-run the relevant tests/final gate. Extra prompts are allowed only when needed for fixes or investigation; the default target remains two prompts per task.
+If implementation/test/review exposes a defect requiring diagnosis, invoke the `debug-mantra` conditional workflow before proposing speculative fixes. After fixing, re-run the relevant tests/final gate. Extra prompts are allowed only when needed for fixes or investigation; the default target remains two prompts per task.
 
 For every task:
 
-`Implement → Test → Senior Review / Final Gate → Fix (if needed) → Re-test → Prompt Audit → Checklist → DONE`
+`Implement → Test → [if debugging is required: debug-mantra → Fix → Re-test] → Senior Review / Final Gate → Prompt Audit → Checklist → DONE`
 
 A task must not be marked `DONE` until its acceptance criteria, tests, review/final gate, prompt audit, and checklist update are complete.
 
@@ -100,8 +127,8 @@ A task must not be marked `DONE` until its acceptance criteria, tests, review/fi
 - Preserve the prompts used for each task verbatim under `docs/prompts/`.
 - Recommended naming: `docs/prompts/T-###-*.md`.
 - Record the implementation prompt and the Senior Review / Final Gate prompt.
-- If follow-up/fix prompts are required, preserve those verbatim as well.
-- Record implementation summary, changed files, tests/commands executed, review findings, fixes, and final status.
+- If follow-up/fix/debugging prompts are required, preserve those verbatim as well.
+- Record implementation summary, changed files, tests/commands executed, review findings, debugging evidence when applicable, fixes, and final status.
 - Do not silently rewrite a prompt after it has been used.
 
 ---
