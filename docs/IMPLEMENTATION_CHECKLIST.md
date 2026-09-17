@@ -190,7 +190,7 @@ Establish and verify the Angular v14 frontend foundation required for the POS im
 
 ## T-002 — POS UI
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Build the main POS UI and interaction shell used by the sale flow.
@@ -204,15 +204,15 @@ Build the main POS UI and interaction shell used by the sale flow.
 - UI structure suitable for later cash, QR, error, and expiry tasks.
 
 ### Acceptance Criteria
-- [ ] Product code can be entered and submitted using `Enter`.
-- [ ] UI has clear product/sale/payment sections.
-- [ ] Loading and disabled states prevent duplicate unintended actions.
-- [ ] UI can reset cleanly for a new transaction.
-- [ ] No BE contract is invented or changed.
-- [ ] Relevant tests pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] Product code can be entered and submitted using `Enter`.
+- [x] UI has clear product/sale/payment sections.
+- [x] Loading and disabled states prevent duplicate unintended actions.
+- [x] UI can reset cleanly for a new transaction.
+- [x] No BE contract is invented or changed.
+- [x] Relevant tests pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -400,7 +400,7 @@ Validate the complete FE flow against the existing BE contract and close integra
 | Task | Description | Status |
 |---|---|---|
 | T-001 | Angular 14 Foundation | DONE |
-| T-002 | POS UI | TODO |
+| T-002 | POS UI | DONE |
 | T-003 | Create Sale | TODO |
 | T-004 | Cash Payment | TODO |
 | T-005 | QR Payment | TODO |

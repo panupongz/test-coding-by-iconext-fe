@@ -1,0 +1,98 @@
+<section class="pos" aria-labelledby="pos-title">
+  <header class="pos__heading">
+    <div>
+      <p class="eyebrow">Checkout</p>
+      <h1 id="pos-title">Point of Sale</h1>
+      <p class="subtitle">Enter a product code to begin a new transaction.</p>
+    </div>
+
+    <span class="status" [class.status--loading]="isLoading" aria-live="polite">
+      {{ isLoading ? 'Loading product' : 'Ready for a new sale' }}
+    </span>
+  </header>
+
+  <div class="pos__layout">
+    <section class="panel product-entry" aria-labelledby="product-entry-title">
+      <div class="section-heading">
+        <span class="step" aria-hidden="true">1</span>
+        <div>
+          <h2 id="product-entry-title">Product code</h2>
+          <p>Scan or type the code, then press Enter.</p>
+        </div>
+      </div>
+
+      <form (ngSubmit)="submitProductCode()" novalidate>
+        <label for="product-code">Product code</label>
+        <div class="input-row">
+          <input
+            id="product-code"
+            type="text"
+            autocomplete="off"
+            [formControl]="productCodeControl"
+            [attr.aria-invalid]="productCodeControl.invalid && productCodeControl.touched"
+            [attr.aria-describedby]="productCodeControl.invalid && productCodeControl.touched ? 'product-code-error' : 'product-code-hint'"
+            (keydown.enter)="$event.preventDefault(); submitProductCode()"
+          />
+          <button type="submit" class="primary" [disabled]="!canSubmitProductCode">
+            {{ isLoading ? 'Loading…' : 'Add product' }}
+          </button>
+        </div>
+        <p id="product-code-hint" class="hint">Press Enter to submit the product code.</p>
+        <p
+          *ngIf="productCodeControl.invalid && productCodeControl.touched"
+          id="product-code-error"
+          class="validation-error"
+          role="alert"
+        >
+          Enter a product code.
+        </p>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="sale-summary-title" [attr.aria-busy]="isLoading">
+      <div class="section-heading">
+        <span class="step" aria-hidden="true">2</span>
+        <div>
+          <h2 id="sale-summary-title">Sale summary</h2>
+          <p>Review the selected product before payment.</p>
+        </div>
+      </div>
+
+      <div *ngIf="isLoading; else emptySummary" class="state-card" role="status">
+        <div>
+          <strong>Loading product details</strong>
+          <p *ngIf="submittedProductCode">Code: {{ submittedProductCode }}</p>
+        </div>
+      </div>
+
+      <ng-template #emptySummary>
+        <div class="state-card state-card--empty">
+          <strong>No product selected</strong>
+          <p>Product details and the sale total will appear here.</p>
+        </div>
+      </ng-template>
+    </section>
+
+    <section class="panel payment" aria-labelledby="payment-title">
+      <div class="section-heading">
+        <span class="step" aria-hidden="true">3</span>
+        <div>
+          <h2 id="payment-title">Payment method</h2>
+          <p>Payment becomes available after a product is loaded.</p>
+        </div>
+      </div>
+
+      <div class="payment__options" aria-label="Payment methods">
+        <button type="button" disabled aria-describedby="payment-unavailable">Cash</button>
+        <button type="button" disabled aria-describedby="payment-unavailable">QR payment</button>
+      </div>
+      <p id="payment-unavailable" class="hint">Add a product to continue to payment.</p>
+    </section>
+  </div>
+
+  <footer class="pos__actions">
+    <button type="button" class="secondary" [disabled]="!canReset" (click)="resetTransaction()">
+      Reset transaction
+    </button>
+  </footer>
+</section>

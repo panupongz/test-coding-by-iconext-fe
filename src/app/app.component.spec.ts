@@ -23,6 +23,6 @@ describe('AppComponent', () => {
   it('renders the application title', () => {
     const element = fixture.nativeElement as HTMLElement;
 
-    expect(element.querySelector('h1')?.textContent).toContain('Iconext POS');
+    expect(element.querySelector('.brand')?.textContent).toContain('Iconext POS');
   });
 });
