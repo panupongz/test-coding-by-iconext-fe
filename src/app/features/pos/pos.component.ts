@@ -3,7 +3,9 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  OnDestroy
+  ElementRef,
+  OnDestroy,
+  ViewChild
 } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { NEVER, Subject, switchMap, takeUntil, timer } from 'rxjs';
@@ -82,6 +84,9 @@ interface RetryableCancellationAttempt {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PosComponent implements OnDestroy {
+  @ViewChild('productCodeInput')
+  private productCodeInput?: ElementRef<HTMLInputElement>;
+
   readonly productCodeControl = new FormControl('', {
     nonNullable: true,
     validators: [Validators.required, Validators.pattern(/^\s*P\d{3}\s*$/)]
@@ -399,6 +404,7 @@ export class PosComponent implements OnDestroy {
           };
           if (this.retryableCreateSaleAttempt === null) {
             this.productCodeControl.enable({ emitEvent: false });
+            this.focusProductCodeEntry();
           }
           this.changeDetector.markForCheck();
         }
@@ -437,6 +443,7 @@ export class PosComponent implements OnDestroy {
     this.productCodeControl.reset('', { emitEvent: false });
     this.productCodeControl.enable({ emitEvent: false });
     this.changeDetector.markForCheck();
+    this.focusProductCodeEntry();
   }
 
   ngOnDestroy(): void {
@@ -460,6 +467,19 @@ export class PosComponent implements OnDestroy {
 
   private isAmbiguousCreateSaleFailure(error: unknown): boolean {
     return this.isAmbiguousRequestFailure(error);
+  }
+
+  private focusProductCodeEntry(): void {
+    timer(0)
+      .pipe(takeUntil(this.destroyed$))
+      .subscribe(() => {
+        if (
+          this.productCodeControl.enabled &&
+          this.saleState.status !== 'active'
+        ) {
+          this.productCodeInput?.nativeElement.focus();
+        }
+      });
   }
 
   private get isCashPaymentAvailable(): boolean {

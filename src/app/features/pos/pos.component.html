@@ -21,19 +21,33 @@
         </div>
       </div>
 
-      <form (ngSubmit)="submitProductCode()" novalidate>
+      <form
+        (ngSubmit)="submitProductCode()"
+        [attr.aria-busy]="isLoading"
+        novalidate
+      >
         <label for="product-code">Product code</label>
         <div class="input-row">
           <input
+            #productCodeInput
             id="product-code"
             type="text"
             autocomplete="off"
+            autocapitalize="characters"
+            autofocus
+            inputmode="text"
             [formControl]="productCodeControl"
             [attr.aria-invalid]="productCodeControl.invalid && productCodeControl.touched"
             [attr.aria-describedby]="productCodeControl.invalid && productCodeControl.touched ? 'product-code-error' : 'product-code-hint'"
             (keydown.enter)="$event.preventDefault(); submitProductCode()"
           />
-          <button type="submit" class="primary" [disabled]="!canSubmitProductCode">
+          <button
+            type="submit"
+            class="primary"
+            [class.button--loading]="isLoading"
+            [disabled]="!canSubmitProductCode"
+            [attr.aria-busy]="isLoading"
+          >
             {{ isLoading ? 'Loading…' : 'Add product' }}
           </button>
         </div>
@@ -131,7 +145,12 @@
         </div>
       </div>
 
-      <div class="payment__options" aria-label="Payment methods">
+      <div
+        class="payment__options"
+        role="group"
+        aria-label="Payment methods"
+        aria-describedby="payment-unavailable"
+      >
         <button
           type="button"
           [disabled]="!canSelectPaymentMethod"
@@ -153,6 +172,15 @@
         {{ canSelectPaymentMethod ? 'Choose cash or QR payment to continue.' : (activeSale ? 'Payment is unavailable for the current sale state.' : 'Add a product to continue to payment.') }}
       </p>
 
+      <p
+        *ngIf="selectedPaymentMethod as paymentMethod"
+        class="payment__selection"
+        role="status"
+      >
+        Selected payment method:
+        <strong>{{ paymentMethod === 'CASH' ? 'Cash' : 'QR payment' }}</strong>
+      </p>
+
       <section
         *ngIf="activeSale && selectedPaymentMethod === 'CASH'"
         class="cash-payment"
@@ -167,10 +195,10 @@
           <strong>{{ amountReceived | currency: 'THB':'symbol-narrow':'1.0-0' }}</strong>
         </div>
 
-        <div class="payment__options cash-payment__denominations" aria-label="Cash denominations">
-          <button type="button" [disabled]="!canAddCash" (click)="addCash(100)">+100</button>
-          <button type="button" [disabled]="!canAddCash" (click)="addCash(500)">+500</button>
-          <button type="button" [disabled]="!canAddCash" (click)="addCash(1000)">+1,000</button>
+        <div class="payment__options cash-payment__denominations" role="group" aria-label="Cash denominations">
+          <button type="button" aria-label="Add 100 baht" [disabled]="!canAddCash" (click)="addCash(100)">+100</button>
+          <button type="button" aria-label="Add 500 baht" [disabled]="!canAddCash" (click)="addCash(500)">+500</button>
+          <button type="button" aria-label="Add 1,000 baht" [disabled]="!canAddCash" (click)="addCash(1000)">+1,000</button>
         </div>
 
         <dl class="state-card cash-payment__summary">
@@ -206,7 +234,9 @@
         <button
           type="button"
           class="primary cash-payment__confirm"
+          [class.button--loading]="isPaymentSubmitting"
           [disabled]="!canConfirmCashPayment"
+          [attr.aria-busy]="isPaymentSubmitting"
           (click)="confirmCashPayment()"
         >
           {{ isPaymentSubmitting ? 'Processing…' : 'Confirm cash payment' }}
@@ -247,7 +277,9 @@
         <button
           type="button"
           class="primary qr-payment__confirm"
+          [class.button--loading]="isPaymentSubmitting"
           [disabled]="!canConfirmQrPayment"
+          [attr.aria-busy]="isPaymentSubmitting"
           (click)="confirmQrPayment()"
         >
           {{ isPaymentSubmitting ? 'Processing…' : 'Confirm QR payment' }}
@@ -257,7 +289,14 @@
   </div>
 
   <footer class="pos__actions">
-    <button type="button" class="secondary" [disabled]="!canReset" (click)="resetTransaction()">
+    <button
+      type="button"
+      class="secondary"
+      [class.button--loading]="isCancellationSubmitting"
+      [disabled]="!canReset"
+      [attr.aria-busy]="isCancellationSubmitting"
+      (click)="resetTransaction()"
+    >
       {{ transactionActionLabel }}
     </button>
   </footer>

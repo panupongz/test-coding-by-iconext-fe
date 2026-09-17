@@ -180,6 +180,29 @@ describe('PosComponent', () => {
     expect(component.canReset).toBeFalse();
   });
 
+  it('exposes a clear busy and disabled state while product loading is active', () => {
+    const pendingResponse = new Subject<CreateSaleResponse>();
+    saleApi.createSale.and.returnValue(
+      createOperation(pendingResponse.asObservable())
+    );
+    component.productCodeControl.setValue('P001');
+
+    fixture.debugElement.query(By.css('form')).triggerEventHandler('ngSubmit');
+    fixture.detectChanges();
+
+    const form = fixture.debugElement.query(By.css('form'))
+      .nativeElement as HTMLFormElement;
+    const submitButton = fixture.debugElement.query(
+      By.css('button[type="submit"]')
+    ).nativeElement as HTMLButtonElement;
+    expect(component.isLoading).toBeTrue();
+    expect(form.getAttribute('aria-busy')).toBe('true');
+    expect(submitButton.disabled).toBeTrue();
+    expect(submitButton.getAttribute('aria-busy')).toBe('true');
+    expect(submitButton.classList).toContain('button--loading');
+    expect(submitButton.textContent).toContain('Loading');
+  });
+
   it('does not submit an invalid product code', () => {
     component.productCodeControl.setValue('SKU-001');
     fixture.detectChanges();
@@ -200,7 +223,7 @@ describe('PosComponent', () => {
     ).toContain('P followed by 3 digits');
   });
 
-  it('returns to a recoverable state and shows the backend error after a failure', () => {
+  it('returns focus to product entry after a definite create-sale failure', fakeAsync(() => {
     saleApi.createSale.and.returnValue(
       createOperation(
         throwError(
@@ -221,6 +244,7 @@ describe('PosComponent', () => {
 
     component.submitProductCode();
     fixture.detectChanges();
+    tick();
 
     expect(component.saleState.status).toBe('error');
     expect(component.activeSale).toBeNull();
@@ -231,7 +255,11 @@ describe('PosComponent', () => {
       (fixture.nativeElement as HTMLElement).querySelector('[role="alert"]')
         ?.textContent
     ).toContain('ไม่พบสินค้า');
-  });
+    expect(document.activeElement).toBe(
+      fixture.debugElement.query(By.css('#product-code'))
+        .nativeElement as HTMLInputElement
+    );
+  }));
 
   it('reuses the key when retrying an outcome-ambiguous transport failure', () => {
     saleApi.createSale.and.returnValues(
@@ -338,8 +366,26 @@ describe('PosComponent', () => {
     const qrPayment = (fixture.nativeElement as HTMLElement).querySelector(
       '.qr-payment'
     );
+    const paymentButtons = fixture.debugElement.queryAll(
+      By.css('.payment__options > button')
+    );
     expect(qrPayment?.textContent).toContain('QR payment');
     expect(qrPayment?.textContent).toContain('60');
+    expect(
+      (paymentButtons[0].nativeElement as HTMLButtonElement).getAttribute(
+        'aria-pressed'
+      )
+    ).toBe('false');
+    expect(
+      (paymentButtons[1].nativeElement as HTMLButtonElement).getAttribute(
+        'aria-pressed'
+      )
+    ).toBe('true');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.payment__selection'
+      )?.textContent
+    ).toContain('QR payment');
   });
 
   it('submits the active sale ID and exact total once for QR payment', () => {
@@ -696,7 +742,7 @@ describe('PosComponent', () => {
     expect(component.statusLabel).toBe('รายการขายหมดอายุ');
   });
 
-  it('cancels an active sale through the backend before resetting it', () => {
+  it('cancels an active sale through the backend before resetting it', fakeAsync(() => {
     saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
     saleApi.cancelSale.and.returnValue(
       cancelSaleOperation(
@@ -715,6 +761,7 @@ describe('PosComponent', () => {
 
     component.resetTransaction();
     fixture.detectChanges();
+    tick();
 
     expect(component.saleState.status).toBe('ready');
     expect(component.activeSale).toBeNull();
@@ -723,7 +770,14 @@ describe('PosComponent', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.status')?.textContent
     ).toContain('พร้อมสร้างรายการขายใหม่');
-  });
+    expect(document.activeElement).toBe(
+      fixture.debugElement.query(By.css('#product-code'))
+        .nativeElement as HTMLInputElement
+    );
+    expect(component.selectedPaymentMethod).toBeNull();
+    expect(component.amountReceived).toBe(0);
+    expect(component.paymentState.status).toBe('idle');
+  }));
 
   it('prevents duplicate cancellation while the request is in progress', () => {
     const pendingCancellation = new Subject<CancelSaleResponse>();

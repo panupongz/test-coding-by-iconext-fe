@@ -333,7 +333,7 @@ Make the POS flow resilient to expected API, business, invalid-state, not-found,
 
 ## T-007 — Responsive & UX
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Finalize responsive behavior and transaction UX without changing business rules.
@@ -347,15 +347,15 @@ Finalize responsive behavior and transaction UX without changing business rules.
 - Consistent reset/ready state.
 
 ### Acceptance Criteria
-- [ ] Core POS flow remains usable across the target viewport sizes supported by the project.
-- [ ] Keyboard/product-code flow is clear and predictable.
-- [ ] Loading/disabled states are visually clear.
-- [ ] UX changes do not alter BE/business rules.
-- [ ] No unrelated visual/architecture rewrite is introduced.
-- [ ] Relevant tests/build pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] Core POS flow remains usable across the target viewport sizes supported by the project.
+- [x] Keyboard/product-code flow is clear and predictable.
+- [x] Loading/disabled states are visually clear.
+- [x] UX changes do not alter BE/business rules.
+- [x] No unrelated visual/architecture rewrite is introduced.
+- [x] Relevant tests/build pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -405,7 +405,7 @@ Validate the complete FE flow against the existing BE contract and close integra
 | T-004 | Cash Payment | TODO |
 | T-005 | QR Payment | DONE |
 | T-006 | Sale / Error / Expiry Handling | TODO |
-| T-007 | Responsive & UX | TODO |
+| T-007 | Responsive & UX | DONE |
 | T-008 | Testing + Final Integration | TODO |
 
 ## Completion Rule
