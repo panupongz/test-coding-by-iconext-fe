@@ -119,7 +119,7 @@ A pure function is preferred over an injectable service unless dependency inject
 
 ## R-003 — Extract POS Facade / Application State
 
-**Status:** `READY`
+**Status:** `DONE`
 
 ### Goal
 
@@ -150,18 +150,32 @@ src/app/features/pos/services/
 
 ### Acceptance Criteria
 
-- [ ] `PosComponent` is materially smaller and focused on presentation/UI orchestration.
-- [ ] Reusable/application workflow logic is owned by the facade rather than the component.
-- [ ] API access remains in `SaleApiService`; facade coordinates it rather than duplicating HTTP logic.
-- [ ] Retry/idempotency semantics remain unchanged.
-- [ ] Expiry/cancel/payment/create-sale behavior remains unchanged.
-- [ ] Existing relevant tests pass and facade tests cover extracted behavior.
-- [ ] Angular production build passes.
-- [ ] No unnecessary framework/dependency/architecture is introduced.
+- [x] `PosComponent` is materially smaller and focused on presentation/UI orchestration.
+- [x] Reusable/application workflow logic is owned by the facade rather than the component.
+- [x] API access remains in `SaleApiService`; facade coordinates it rather than duplicating HTTP logic.
+- [x] Retry/idempotency semantics remain unchanged.
+- [x] Expiry/cancel/payment/create-sale behavior remains unchanged.
+- [x] Existing relevant tests pass and facade tests cover extracted behavior (64/64 full suite PASS; 8 facade tests added).
+- [x] Angular production build passes.
+- [x] No unnecessary framework/dependency/architecture is introduced.
+
+### Final Gate Evidence
+
+- Senior Review / Final Gate: `PASS`.
+- Full regression suite: `64/64 PASS`.
+- Production build: `PASS`.
+- `git diff --check`: `PASS`.
+- Facade is component-scoped and is the single mutable POS application-state owner.
+- Create Sale, Cash, QR, Cancellation, retry/idempotency, expiry/timer, Thank You/reset and RxJS lifecycle behavior were reviewed as equivalent.
+- `SaleMapper` remains the mapping boundary and `SaleApiService` remains the sole HTTP/API owner.
+- No R-003 defect or behavioral regression was found.
+- Existing `pos.component.scss` budget warning remains unchanged and non-blocking.
 
 ---
 
 ## Final Regression Gate
+
+**Status:** `PENDING`
 
 R-001, R-002, and R-003 may be closed only after the completed T-001 through T-008 flow remains valid.
 
