@@ -218,7 +218,7 @@ Build the main POS UI and interaction shell used by the sale flow.
 
 ## T-003 — Create Sale
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Connect product-code submission to the existing BE create-sale flow.
@@ -231,15 +231,15 @@ Connect product-code submission to the existing BE create-sale flow.
 - Prevent duplicate create-sale submissions while a request is active.
 
 ### Acceptance Criteria
-- [ ] Valid product-code submission calls `POST /api/v1/sales` and creates exactly one sale through BE.
-- [ ] FE does not implement multi-product or quantity-changing behavior.
-- [ ] Product and price/total come from the BE response/source of truth.
-- [ ] Duplicate submission is guarded appropriately.
-- [ ] Request/response/error types are explicit and match the actual BE contract.
-- [ ] Relevant tests pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] Valid product-code submission calls `POST /api/v1/sales` and creates exactly one sale through BE.
+- [x] FE does not implement multi-product or quantity-changing behavior.
+- [x] Product and price/total come from the BE response/source of truth.
+- [x] Duplicate submission is guarded appropriately.
+- [x] Request/response/error types are explicit and match the actual BE contract.
+- [x] Relevant tests pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -401,7 +401,7 @@ Validate the complete FE flow against the existing BE contract and close integra
 |---|---|---|
 | T-001 | Angular 14 Foundation | DONE |
 | T-002 | POS UI | DONE |
-| T-003 | Create Sale | TODO |
+| T-003 | Create Sale | DONE |
 | T-004 | Cash Payment | TODO |
 | T-005 | QR Payment | TODO |
 | T-006 | Sale / Error / Expiry Handling | TODO |

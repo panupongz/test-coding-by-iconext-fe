@@ -7,7 +7,7 @@
     </div>
 
     <span class="status" [class.status--loading]="isLoading" aria-live="polite">
-      {{ isLoading ? 'Loading product' : 'Ready for a new sale' }}
+      {{ statusLabel }}
     </span>
   </header>
 
@@ -44,7 +44,7 @@
           class="validation-error"
           role="alert"
         >
-          Enter a product code.
+          Enter a product code in the format P followed by 3 digits.
         </p>
       </form>
     </section>
@@ -58,19 +58,44 @@
         </div>
       </div>
 
-      <div *ngIf="isLoading; else emptySummary" class="state-card" role="status">
+      <div *ngIf="isLoading" class="state-card" role="status">
         <div>
           <strong>Loading product details</strong>
           <p *ngIf="submittedProductCode">Code: {{ submittedProductCode }}</p>
         </div>
       </div>
 
-      <ng-template #emptySummary>
+      <div *ngIf="activeSale as sale" class="state-card sale-details">
+        <div>
+          <strong>{{ sale.productName }}</strong>
+          <p>Code: {{ sale.productCode }}</p>
+          <p>Quantity: {{ sale.quantity }}</p>
+        </div>
+        <dl>
+          <div>
+            <dt>Unit price</dt>
+            <dd>{{ sale.unitPrice | currency: 'THB':'symbol-narrow':'1.0-0' }}</dd>
+          </div>
+          <div class="sale-details__total">
+            <dt>Total</dt>
+            <dd>{{ sale.total | currency: 'THB':'symbol-narrow':'1.0-0' }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div *ngIf="createSaleError as apiError" class="state-card state-card--error" role="alert">
+        <div>
+          <strong>Sale could not be created</strong>
+          <p>{{ apiError.message }}</p>
+        </div>
+      </div>
+
+      <ng-container *ngIf="saleState.status === 'ready'">
         <div class="state-card state-card--empty">
           <strong>No product selected</strong>
           <p>Product details and the sale total will appear here.</p>
         </div>
-      </ng-template>
+      </ng-container>
     </section>
 
     <section class="panel payment" aria-labelledby="payment-title">
@@ -86,7 +111,9 @@
         <button type="button" disabled aria-describedby="payment-unavailable">Cash</button>
         <button type="button" disabled aria-describedby="payment-unavailable">QR payment</button>
       </div>
-      <p id="payment-unavailable" class="hint">Add a product to continue to payment.</p>
+      <p id="payment-unavailable" class="hint">
+        {{ activeSale ? 'Payment will be available in the next step.' : 'Add a product to continue to payment.' }}
+      </p>
     </section>
   </div>
 
