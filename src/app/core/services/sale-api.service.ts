@@ -7,7 +7,11 @@ import {
   CashPaymentApiResponse,
   CashPaymentRequest,
   CreateSaleRequest,
-  CreateSaleResponse
+  CreateSaleResponse,
+  PaymentApiResponse,
+  PaymentRequest,
+  QrPaymentApiResponse,
+  QrPaymentRequest
 } from '../models/sale.models';
 
 export interface CreateSaleOperation {
@@ -15,10 +19,16 @@ export interface CreateSaleOperation {
   readonly response$: Observable<CreateSaleResponse>;
 }
 
-export interface CashPaymentOperation {
+export interface PaymentOperation<
+  TResponse extends PaymentApiResponse = PaymentApiResponse
+> {
   readonly idempotencyKey: string;
-  readonly response$: Observable<CashPaymentApiResponse>;
+  readonly response$: Observable<TResponse>;
 }
+
+export type CashPaymentOperation = PaymentOperation<CashPaymentApiResponse>;
+
+export type QrPaymentOperation = PaymentOperation<QrPaymentApiResponse>;
 
 @Injectable({ providedIn: 'root' })
 export class SaleApiService {
@@ -57,13 +67,35 @@ export class SaleApiService {
       payment_method: 'CASH',
       amount_received: amountReceived
     };
+
+    return this.pay<CashPaymentApiResponse>(saleId, request, idempotencyKey);
+  }
+
+  payQr(
+    saleId: string,
+    amountReceived: number,
+    idempotencyKey: string = crypto.randomUUID()
+  ): QrPaymentOperation {
+    const request: QrPaymentRequest = {
+      payment_method: 'QR_PAYMENT',
+      amount_received: amountReceived
+    };
+
+    return this.pay<QrPaymentApiResponse>(saleId, request, idempotencyKey);
+  }
+
+  private pay<TResponse extends PaymentApiResponse>(
+    saleId: string,
+    request: PaymentRequest,
+    idempotencyKey: string
+  ): PaymentOperation<TResponse> {
     const headers = new HttpHeaders({
       'Idempotency-Key': idempotencyKey
     });
 
     return {
       idempotencyKey,
-      response$: this.http.post<CashPaymentApiResponse>(
+      response$: this.http.post<TResponse>(
         `${this.salesUrl}/${encodeURIComponent(saleId)}/payment`,
         request,
         { headers }

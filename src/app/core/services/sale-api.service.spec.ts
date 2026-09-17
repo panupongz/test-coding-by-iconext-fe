@@ -8,7 +8,9 @@ import { API_BASE_URL } from '../config/api-config.token';
 import {
   CashPaymentApiResponse,
   CashPaymentResponse,
-  CreateSaleResponse
+  CreateSaleResponse,
+  QrPaymentApiResponse,
+  QrPaymentResponse
 } from '../models/sale.models';
 import { SaleApiService } from './sale-api.service';
 
@@ -145,5 +147,59 @@ describe('SaleApiService', () => {
     );
     request.flush(replayedPayment, { status: 200, statusText: 'OK' });
     expect(actualResponse).toEqual(replayedPayment);
+  });
+
+  it('posts the exact QR-payment request to the shared sale payment endpoint', () => {
+    const response: QrPaymentResponse = {
+      payment_id: '4bb8eb24-ce83-4fe7-915f-c84bb74bb9aa',
+      payment_method: 'QR_PAYMENT',
+      amount_received: 60,
+      paid_at: '2026-09-17T03:01:00.000Z'
+    };
+    let actualResponse: QrPaymentApiResponse | undefined;
+
+    service
+      .payQr('5fe1c13b-b0b4-47d6-8e4f-d0ce39596176', 60)
+      .response$.subscribe((payment) => (actualResponse = payment));
+
+    const request = httpController.expectOne(
+      '/api/v1/sales/5fe1c13b-b0b4-47d6-8e4f-d0ce39596176/payment'
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      payment_method: 'QR_PAYMENT',
+      amount_received: 60
+    });
+    expect(request.request.headers.get('Idempotency-Key')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+
+    request.flush(response, { status: 201, statusText: 'Created' });
+    expect(actualResponse).toEqual(response);
+  });
+
+  it('reuses a supplied QR-payment idempotency key', () => {
+    const response: QrPaymentResponse = {
+      payment_id: '4bb8eb24-ce83-4fe7-915f-c84bb74bb9aa',
+      payment_method: 'QR_PAYMENT',
+      amount_received: 60,
+      paid_at: '2026-09-17T03:01:00.000Z'
+    };
+    const operation = service.payQr(
+      '5fe1c13b-b0b4-47d6-8e4f-d0ce39596176',
+      60,
+      'qr-retry-key'
+    );
+
+    operation.response$.subscribe();
+
+    const request = httpController.expectOne(
+      '/api/v1/sales/5fe1c13b-b0b4-47d6-8e4f-d0ce39596176/payment'
+    );
+    expect(operation.idempotencyKey).toBe('qr-retry-key');
+    expect(request.request.headers.get('Idempotency-Key')).toBe(
+      'qr-retry-key'
+    );
+    request.flush(response, { status: 200, statusText: 'OK' });
   });
 });

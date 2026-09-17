@@ -11,17 +11,23 @@ import { Subject, takeUntil } from 'rxjs';
 import {
   ActiveSaleViewModel,
   CashPaymentResponse,
-  CashPaymentState,
   CreateSaleErrorViewModel,
   CreateSaleResponse,
   isCreateSaleApiErrorCode,
   isPaymentApiErrorCode,
+  PaymentApiResponse,
   PaymentApiErrorResponse,
   PaymentErrorViewModel,
+  PaymentMethod,
+  PaymentState,
   PosSaleState,
+  QrPaymentResponse,
   SaleApiErrorResponse
 } from '../../core/models/sale.models';
-import { SaleApiService } from '../../core/services/sale-api.service';
+import {
+  PaymentOperation,
+  SaleApiService
+} from '../../core/services/sale-api.service';
 
 const READY_STATE: PosSaleState = {
   status: 'ready',
@@ -35,7 +41,7 @@ const DEFAULT_CREATE_SALE_ERROR: CreateSaleErrorViewModel = {
   message: 'Unable to create the sale. Please try again.'
 };
 
-const IDLE_CASH_PAYMENT_STATE: CashPaymentState = {
+const IDLE_PAYMENT_STATE: PaymentState = {
   status: 'idle',
   payment: null,
   error: null
@@ -56,8 +62,9 @@ interface RetryableCreateSaleAttempt {
   readonly idempotencyKey: string;
 }
 
-interface RetryableCashPaymentAttempt {
+interface RetryablePaymentAttempt {
   readonly saleId: string;
+  readonly paymentMethod: PaymentMethod;
   readonly amountReceived: number;
   readonly idempotencyKey: string;
 }
@@ -75,13 +82,12 @@ export class PosComponent implements OnDestroy {
   });
   private readonly destroyed$ = new Subject<void>();
   private retryableCreateSaleAttempt: RetryableCreateSaleAttempt | null = null;
-  private retryableCashPaymentAttempt: RetryableCashPaymentAttempt | null =
-    null;
+  private retryablePaymentAttempt: RetryablePaymentAttempt | null = null;
 
   saleState: PosSaleState = READY_STATE;
-  cashPaymentState: CashPaymentState = IDLE_CASH_PAYMENT_STATE;
+  paymentState: PaymentState = IDLE_PAYMENT_STATE;
   amountReceived = 0;
-  selectedPaymentMethod: 'CASH' | null = null;
+  selectedPaymentMethod: PaymentMethod | null = null;
 
   constructor(
     private readonly saleApi: SaleApiService,
@@ -93,7 +99,7 @@ export class PosComponent implements OnDestroy {
   }
 
   get isPaymentSubmitting(): boolean {
-    return this.cashPaymentState.status === 'submitting';
+    return this.paymentState.status === 'submitting';
   }
 
   get activeSale(): ActiveSaleViewModel | null {
@@ -121,10 +127,18 @@ export class PosComponent implements OnDestroy {
     );
   }
 
+  get canSelectPaymentMethod(): boolean {
+    return (
+      this.saleState.status === 'active' &&
+      this.saleState.activeSale.status === 'PENDING' &&
+      !this.isPaymentSubmitting &&
+      this.retryablePaymentAttempt === null
+    );
+  }
+
   get canAddCash(): boolean {
     return (
-      this.isCashPaymentAvailable &&
-      this.retryableCashPaymentAttempt === null
+      this.isCashPaymentAvailable && this.retryablePaymentAttempt === null
     );
   }
 
@@ -141,12 +155,22 @@ export class PosComponent implements OnDestroy {
     );
   }
 
+  get canConfirmQrPayment(): boolean {
+    return this.isQrPaymentAvailable && this.activeSale !== null;
+  }
+
   get paymentError(): PaymentErrorViewModel | null {
-    return this.cashPaymentState.error;
+    return this.paymentState.error;
   }
 
   get completedCashPayment(): CashPaymentResponse | null {
-    return this.cashPaymentState.payment;
+    const payment = this.paymentState.payment;
+    return payment?.payment_method === 'CASH' ? payment : null;
+  }
+
+  get completedQrPayment(): QrPaymentResponse | null {
+    const payment = this.paymentState.payment;
+    return payment?.payment_method === 'QR_PAYMENT' ? payment : null;
   }
 
   get statusLabel(): string {
@@ -154,13 +178,13 @@ export class PosComponent implements OnDestroy {
       case 'loading':
         return 'Loading product';
       case 'active':
-        if (this.cashPaymentState.status === 'submitting') {
+        if (this.isPaymentSubmitting) {
           return 'Processing payment';
         }
-        if (this.cashPaymentState.status === 'paid') {
+        if (this.paymentState.status === 'paid') {
           return 'Payment complete';
         }
-        if (this.cashPaymentState.status === 'expired') {
+        if (this.paymentState.status === 'expired') {
           return 'Sale expired';
         }
         return 'Sale ready for payment';
@@ -177,19 +201,23 @@ export class PosComponent implements OnDestroy {
     }
 
     this.amountReceived += amount;
-    this.cashPaymentState = IDLE_CASH_PAYMENT_STATE;
+    this.paymentState = IDLE_PAYMENT_STATE;
   }
 
   selectCashPayment(): void {
-    if (
-      this.saleState.status !== 'active' ||
-      this.saleState.activeSale.status !== 'PENDING' ||
-      this.isPaymentSubmitting
-    ) {
+    if (!this.canSelectPaymentMethod) {
       return;
     }
 
     this.selectedPaymentMethod = 'CASH';
+  }
+
+  selectQrPayment(): void {
+    if (!this.canSelectPaymentMethod) {
+      return;
+    }
+
+    this.selectedPaymentMethod = 'QR_PAYMENT';
   }
 
   confirmCashPayment(): void {
@@ -197,64 +225,15 @@ export class PosComponent implements OnDestroy {
       return;
     }
 
-    const saleId = this.activeSale.saleId;
-    const amountReceived = this.amountReceived;
-    const retryKey =
-      this.retryableCashPaymentAttempt?.saleId === saleId &&
-      this.retryableCashPaymentAttempt.amountReceived === amountReceived
-        ? this.retryableCashPaymentAttempt.idempotencyKey
-        : undefined;
-    const operation =
-      retryKey === undefined
-        ? this.saleApi.payCash(saleId, amountReceived)
-        : this.saleApi.payCash(saleId, amountReceived, retryKey);
+    this.submitPayment('CASH', this.amountReceived);
+  }
 
-    this.retryableCashPaymentAttempt = null;
-    this.cashPaymentState = {
-      status: 'submitting',
-      payment: null,
-      error: null
-    };
+  confirmQrPayment(): void {
+    if (!this.canConfirmQrPayment || this.activeSale === null) {
+      return;
+    }
 
-    operation.response$
-      .pipe(takeUntil(this.destroyed$))
-      .subscribe({
-        next: (response) => {
-          this.retryableCashPaymentAttempt = null;
-
-          if ('payment_id' in response) {
-            this.cashPaymentState = {
-              status: 'paid',
-              payment: response,
-              error: null
-            };
-            this.updateActiveSaleStatus('PAID');
-          } else {
-            this.cashPaymentState = {
-              status: 'expired',
-              payment: null,
-              error: EXPIRED_SALE_ERROR
-            };
-            this.updateActiveSaleStatus('CANCELLED');
-          }
-          this.changeDetector.markForCheck();
-        },
-        error: (error: unknown) => {
-          if (this.isAmbiguousRequestFailure(error)) {
-            this.retryableCashPaymentAttempt = {
-              saleId,
-              amountReceived,
-              idempotencyKey: operation.idempotencyKey
-            };
-          }
-          this.cashPaymentState = {
-            status: 'error',
-            payment: null,
-            error: this.toPaymentApiError(error)
-          };
-          this.changeDetector.markForCheck();
-        }
-      });
+    this.submitPayment('QR_PAYMENT', this.activeSale.total);
   }
 
   submitProductCode(): void {
@@ -321,9 +300,9 @@ export class PosComponent implements OnDestroy {
     }
 
     this.retryableCreateSaleAttempt = null;
-    this.retryableCashPaymentAttempt = null;
+    this.retryablePaymentAttempt = null;
     this.saleState = READY_STATE;
-    this.cashPaymentState = IDLE_CASH_PAYMENT_STATE;
+    this.paymentState = IDLE_PAYMENT_STATE;
     this.amountReceived = 0;
     this.selectedPaymentMethod = null;
     this.productCodeControl.reset('', { emitEvent: false });
@@ -371,6 +350,104 @@ export class PosComponent implements OnDestroy {
       this.selectedPaymentMethod === 'CASH' &&
       !this.isPaymentSubmitting
     );
+  }
+
+  private get isQrPaymentAvailable(): boolean {
+    return (
+      this.saleState.status === 'active' &&
+      this.saleState.activeSale.status === 'PENDING' &&
+      this.selectedPaymentMethod === 'QR_PAYMENT' &&
+      !this.isPaymentSubmitting
+    );
+  }
+
+  private submitPayment(
+    paymentMethod: PaymentMethod,
+    amountReceived: number
+  ): void {
+    const activeSale = this.activeSale;
+    if (activeSale === null) {
+      return;
+    }
+
+    const saleId = activeSale.saleId;
+    const retryKey =
+      this.retryablePaymentAttempt?.saleId === saleId &&
+      this.retryablePaymentAttempt.paymentMethod === paymentMethod &&
+      this.retryablePaymentAttempt.amountReceived === amountReceived
+        ? this.retryablePaymentAttempt.idempotencyKey
+        : undefined;
+    const operation = this.createPaymentOperation(
+      paymentMethod,
+      saleId,
+      amountReceived,
+      retryKey
+    );
+
+    this.retryablePaymentAttempt = null;
+    this.paymentState = {
+      status: 'submitting',
+      payment: null,
+      error: null
+    };
+
+    operation.response$
+      .pipe(takeUntil(this.destroyed$))
+      .subscribe({
+        next: (response: PaymentApiResponse) => {
+          this.retryablePaymentAttempt = null;
+
+          if ('payment_id' in response) {
+            this.paymentState = {
+              status: 'paid',
+              payment: response,
+              error: null
+            };
+            this.updateActiveSaleStatus('PAID');
+          } else {
+            this.paymentState = {
+              status: 'expired',
+              payment: null,
+              error: EXPIRED_SALE_ERROR
+            };
+            this.updateActiveSaleStatus('CANCELLED');
+          }
+          this.changeDetector.markForCheck();
+        },
+        error: (error: unknown) => {
+          if (this.isAmbiguousRequestFailure(error)) {
+            this.retryablePaymentAttempt = {
+              saleId,
+              paymentMethod,
+              amountReceived,
+              idempotencyKey: operation.idempotencyKey
+            };
+          }
+          this.paymentState = {
+            status: 'error',
+            payment: null,
+            error: this.toPaymentApiError(error)
+          };
+          this.changeDetector.markForCheck();
+        }
+      });
+  }
+
+  private createPaymentOperation(
+    paymentMethod: PaymentMethod,
+    saleId: string,
+    amountReceived: number,
+    retryKey?: string
+  ): PaymentOperation {
+    if (paymentMethod === 'CASH') {
+      return retryKey === undefined
+        ? this.saleApi.payCash(saleId, amountReceived)
+        : this.saleApi.payCash(saleId, amountReceived, retryKey);
+    }
+
+    return retryKey === undefined
+      ? this.saleApi.payQr(saleId, amountReceived)
+      : this.saleApi.payQr(saleId, amountReceived, retryKey);
   }
 
   private isAmbiguousRequestFailure(error: unknown): boolean {

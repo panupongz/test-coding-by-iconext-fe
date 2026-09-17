@@ -58,6 +58,7 @@ export const PAYMENT_API_ERROR_CODES = [
   'SALE_ALREADY_PAID',
   'SALE_CANCELLED',
   'INSUFFICIENT_CASH_AMOUNT',
+  'QR_AMOUNT_MISMATCH',
   'UNSUPPORTED_PAYMENT_METHOD',
   'IDEMPOTENCY_KEY_REQUIRED',
   'IDEMPOTENCY_KEY_TOO_LONG',
@@ -74,10 +75,19 @@ export const isPaymentApiErrorCode = (
   typeof value === 'string' &&
   PAYMENT_API_ERROR_CODES.some((errorCode) => errorCode === value);
 
+export type PaymentMethod = 'CASH' | 'QR_PAYMENT';
+
 export interface CashPaymentRequest {
   readonly payment_method: 'CASH';
   readonly amount_received: number;
 }
+
+export interface QrPaymentRequest {
+  readonly payment_method: 'QR_PAYMENT';
+  readonly amount_received: number;
+}
+
+export type PaymentRequest = CashPaymentRequest | QrPaymentRequest;
 
 export interface CashPaymentResponse {
   readonly payment_id: string;
@@ -87,6 +97,15 @@ export interface CashPaymentResponse {
   readonly change: number;
 }
 
+export interface QrPaymentResponse {
+  readonly payment_id: string;
+  readonly payment_method: 'QR_PAYMENT';
+  readonly amount_received: number;
+  readonly paid_at: string;
+}
+
+export type PaymentResponse = CashPaymentResponse | QrPaymentResponse;
+
 export interface ExpiredSaleResponse {
   readonly sale_id: string;
   readonly status: 'CANCELLED';
@@ -95,6 +114,10 @@ export interface ExpiredSaleResponse {
 export type CashPaymentApiResponse =
   | CashPaymentResponse
   | ExpiredSaleResponse;
+
+export type QrPaymentApiResponse = QrPaymentResponse | ExpiredSaleResponse;
+
+export type PaymentApiResponse = PaymentResponse | ExpiredSaleResponse;
 
 export interface PaymentErrorViewModel {
   readonly code: string;
@@ -108,7 +131,7 @@ export interface PaymentApiErrorResponse {
   };
 }
 
-export type CashPaymentState =
+export type PaymentState =
   | {
       readonly status: 'idle';
       readonly payment: null;
@@ -121,7 +144,7 @@ export type CashPaymentState =
     }
   | {
       readonly status: 'paid';
-      readonly payment: CashPaymentResponse;
+      readonly payment: PaymentResponse;
       readonly error: null;
     }
   | {

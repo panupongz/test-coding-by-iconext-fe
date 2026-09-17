@@ -274,7 +274,7 @@ Implement the cash-payment interaction and submit it through the existing BE pay
 
 ## T-005 — QR Payment
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Implement QR payment using the existing BE payment contract.
@@ -288,16 +288,16 @@ Implement QR payment using the existing BE payment contract.
 - Loading/duplicate-action protection.
 
 ### Acceptance Criteria
-- [ ] QR payment UI is shown when QR is selected.
-- [ ] QR confirmation calls `POST /api/v1/sales/:sale_id/payment` according to the existing BE contract.
-- [ ] `amount_received` equals the sale `total` for QR confirmation.
-- [ ] FE does not invent a separate QR payment endpoint.
-- [ ] Duplicate payment submission is guarded.
-- [ ] FE does not fabricate unsupported BE behavior/data.
-- [ ] Relevant tests pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] QR payment UI is shown when QR is selected.
+- [x] QR confirmation calls `POST /api/v1/sales/:sale_id/payment` according to the existing BE contract.
+- [x] `amount_received` equals the sale `total` for QR confirmation.
+- [x] FE does not invent a separate QR payment endpoint.
+- [x] Duplicate payment submission is guarded.
+- [x] FE does not fabricate unsupported BE behavior/data.
+- [x] Relevant tests pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -403,7 +403,7 @@ Validate the complete FE flow against the existing BE contract and close integra
 | T-002 | POS UI | DONE |
 | T-003 | Create Sale | DONE |
 | T-004 | Cash Payment | TODO |
-| T-005 | QR Payment | TODO |
+| T-005 | QR Payment | DONE |
 | T-006 | Sale / Error / Expiry Handling | TODO |
 | T-007 | Responsive & UX | TODO |
 | T-008 | Testing + Final Integration | TODO |

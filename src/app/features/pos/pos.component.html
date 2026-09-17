@@ -110,16 +110,23 @@
       <div class="payment__options" aria-label="Payment methods">
         <button
           type="button"
-          [disabled]="!activeSale || activeSale.status !== 'PENDING' || isPaymentSubmitting"
+          [disabled]="!canSelectPaymentMethod"
           [attr.aria-pressed]="selectedPaymentMethod === 'CASH'"
           (click)="selectCashPayment()"
         >
           Cash
         </button>
-        <button type="button" disabled aria-describedby="payment-unavailable">QR payment</button>
+        <button
+          type="button"
+          [disabled]="!canSelectPaymentMethod"
+          [attr.aria-pressed]="selectedPaymentMethod === 'QR_PAYMENT'"
+          (click)="selectQrPayment()"
+        >
+          QR payment
+        </button>
       </div>
       <p id="payment-unavailable" class="hint">
-        {{ activeSale ? 'Choose cash to enter the amount received. QR payment is not yet available.' : 'Add a product to continue to payment.' }}
+        {{ activeSale ? 'Choose cash or QR payment to continue.' : 'Add a product to continue to payment.' }}
       </p>
 
       <section
@@ -162,7 +169,7 @@
         </p>
 
         <div *ngIf="paymentError as apiError" class="state-card payment-message payment-message--error" role="alert">
-          <strong>{{ cashPaymentState.status === 'expired' ? 'Sale expired' : 'Payment could not be completed' }}</strong>
+          <strong>{{ paymentState.status === 'expired' ? 'Sale expired' : 'Payment could not be completed' }}</strong>
           <p>{{ apiError.message }}</p>
         </div>
 
@@ -179,6 +186,47 @@
           (click)="confirmCashPayment()"
         >
           {{ isPaymentSubmitting ? 'Processing…' : 'Confirm cash payment' }}
+        </button>
+      </section>
+
+      <section
+        *ngIf="activeSale && selectedPaymentMethod === 'QR_PAYMENT'"
+        class="qr-payment"
+        aria-labelledby="qr-payment-title"
+        [attr.aria-busy]="isPaymentSubmitting"
+      >
+        <div class="pos__heading qr-payment__heading">
+          <div>
+            <h3 id="qr-payment-title">QR payment</h3>
+            <p>Confirm after the customer completes the QR transfer.</p>
+          </div>
+          <strong>{{ activeSale.total | currency: 'THB':'symbol-narrow':'1.0-0' }}</strong>
+        </div>
+
+        <div class="state-card qr-payment__summary">
+          <div>
+            <strong>Payment amount</strong>
+            <p>The exact sale total will be submitted to the payment service.</p>
+          </div>
+        </div>
+
+        <div *ngIf="paymentError as apiError" class="state-card payment-message payment-message--error" role="alert">
+          <strong>{{ paymentState.status === 'expired' ? 'Sale expired' : 'Payment could not be completed' }}</strong>
+          <p>{{ apiError.message }}</p>
+        </div>
+
+        <div *ngIf="completedQrPayment as payment" class="state-card payment-message payment-message--success" role="status">
+          <strong>QR payment complete</strong>
+          <p>Payment ID: {{ payment.payment_id }}</p>
+        </div>
+
+        <button
+          type="button"
+          class="primary qr-payment__confirm"
+          [disabled]="!canConfirmQrPayment"
+          (click)="confirmQrPayment()"
+        >
+          {{ isPaymentSubmitting ? 'Processing…' : 'Confirm QR payment' }}
         </button>
       </section>
     </section>

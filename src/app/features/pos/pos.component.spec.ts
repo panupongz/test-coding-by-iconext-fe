@@ -7,11 +7,14 @@ import { Observable, of, Subject, throwError } from 'rxjs';
 import {
   CashPaymentApiResponse,
   CashPaymentResponse,
-  CreateSaleResponse
+  CreateSaleResponse,
+  QrPaymentApiResponse,
+  QrPaymentResponse
 } from '../../core/models/sale.models';
 import {
   CashPaymentOperation,
   CreateSaleOperation,
+  QrPaymentOperation,
   SaleApiService
 } from '../../core/services/sale-api.service';
 import { PosComponent } from './pos.component';
@@ -46,6 +49,18 @@ const cashPaymentOperation = (
   idempotencyKey: string = 'cash-payment-key'
 ): CashPaymentOperation => ({ idempotencyKey, response$ });
 
+const QR_PAYMENT_RESPONSE: QrPaymentResponse = {
+  payment_id: '4bb8eb24-ce83-4fe7-915f-c84bb74bb9aa',
+  payment_method: 'QR_PAYMENT',
+  amount_received: 60,
+  paid_at: '2026-09-17T03:01:00.000Z'
+};
+
+const qrPaymentOperation = (
+  response$: Observable<QrPaymentApiResponse>,
+  idempotencyKey: string = 'qr-payment-key'
+): QrPaymentOperation => ({ idempotencyKey, response$ });
+
 describe('PosComponent', () => {
   let component: PosComponent;
   let fixture: ComponentFixture<PosComponent>;
@@ -54,7 +69,8 @@ describe('PosComponent', () => {
   beforeEach(async () => {
     saleApi = jasmine.createSpyObj<SaleApiService>('SaleApiService', [
       'createSale',
-      'payCash'
+      'payCash',
+      'payQr'
     ]);
 
     await TestBed.configureTestingModule({
@@ -246,7 +262,7 @@ describe('PosComponent', () => {
     expect(component.saleState.status).toBe('active');
   });
 
-  it('enables cash and keeps QR disabled when a pending sale is active', () => {
+  it('enables cash and QR when a pending sale is active', () => {
     saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
     component.productCodeControl.setValue('P001');
     component.submitProductCode();
@@ -258,7 +274,190 @@ describe('PosComponent', () => {
     expect((paymentButtons[0].nativeElement as HTMLButtonElement).disabled)
       .toBeFalse();
     expect((paymentButtons[1].nativeElement as HTMLButtonElement).disabled)
-      .toBeTrue();
+      .toBeFalse();
+  });
+
+  it('shows the QR payment UI only after QR is selected', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.qr-payment')
+    ).toBeNull();
+
+    fixture.debugElement
+      .queryAll(By.css('.payment__options button'))[1]
+      .triggerEventHandler('click');
+    fixture.detectChanges();
+
+    const qrPayment = (fixture.nativeElement as HTMLElement).querySelector(
+      '.qr-payment'
+    );
+    expect(qrPayment?.textContent).toContain('QR payment');
+    expect(qrPayment?.textContent).toContain('60');
+  });
+
+  it('submits the active sale ID and exact total once for QR payment', () => {
+    const pendingPayment = new Subject<QrPaymentApiResponse>();
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(pendingPayment.asObservable())
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+    component.confirmQrPayment();
+    fixture.detectChanges();
+
+    expect(saleApi.payQr).toHaveBeenCalledOnceWith(
+      SALE_RESPONSE.sale_id,
+      SALE_RESPONSE.total
+    );
+    expect(component.isPaymentSubmitting).toBeTrue();
+    expect(component.canConfirmQrPayment).toBeFalse();
+    expect(component.canReset).toBeFalse();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.qr-payment__confirm'
+      )?.textContent
+    ).toContain('Processing');
+
+    pendingPayment.next(QR_PAYMENT_RESPONSE);
+    pendingPayment.complete();
+    fixture.detectChanges();
+
+    expect(component.paymentState.status).toBe('paid');
+    expect(component.completedQrPayment).toEqual(QR_PAYMENT_RESPONSE);
+    expect(component.activeSale?.status).toBe('PAID');
+    expect(component.statusLabel).toBe('Payment complete');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.payment-message--success'
+      )?.textContent
+    ).toContain(QR_PAYMENT_RESPONSE.payment_id);
+  });
+
+  it('shows a QR business validation error and allows a new safe attempt', () => {
+    const backendError = new HttpErrorResponse({
+      status: 400,
+      error: {
+        error: {
+          code: 'QR_AMOUNT_MISMATCH',
+          message: 'QR amount must equal the sale total'
+        }
+      }
+    });
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValues(
+      qrPaymentOperation(throwError(() => backendError), 'failed-qr-key'),
+      qrPaymentOperation(of(QR_PAYMENT_RESPONSE), 'new-qr-key')
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+    fixture.detectChanges();
+
+    expect(component.paymentState.status).toBe('error');
+    expect(component.paymentError?.code).toBe('QR_AMOUNT_MISMATCH');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.payment-message--error'
+      )?.textContent
+    ).toContain('QR amount must equal the sale total');
+
+    component.confirmQrPayment();
+    expect(saleApi.payQr.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id, SALE_RESPONSE.total],
+      [SALE_RESPONSE.sale_id, SALE_RESPONSE.total]
+    ]);
+  });
+
+  it('uses a safe QR network error and reuses the ambiguous attempt key', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValues(
+      qrPaymentOperation(
+        throwError(() => new HttpErrorResponse({ status: 0 })),
+        'ambiguous-qr-key'
+      ),
+      qrPaymentOperation(of(QR_PAYMENT_RESPONSE), 'ambiguous-qr-key')
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+    expect(component.paymentState.status).toBe('error');
+    expect(component.paymentError?.code).toBe('PAYMENT_FAILED');
+    component.selectCashPayment();
+    expect(component.selectedPaymentMethod).toBe('QR_PAYMENT');
+    component.confirmQrPayment();
+
+    expect(saleApi.payQr.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id, SALE_RESPONSE.total],
+      [
+        SALE_RESPONSE.sale_id,
+        SALE_RESPONSE.total,
+        'ambiguous-qr-key'
+      ]
+    ]);
+  });
+
+  it('maps a QR server error and reuses its idempotency key on retry', () => {
+    const serverError = new HttpErrorResponse({
+      status: 503,
+      error: {
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Unable to process the payment'
+        }
+      }
+    });
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValues(
+      qrPaymentOperation(throwError(() => serverError), 'server-qr-key'),
+      qrPaymentOperation(of(QR_PAYMENT_RESPONSE), 'server-qr-key')
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+    expect(component.paymentError).toEqual({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Unable to process the payment'
+    });
+    component.confirmQrPayment();
+
+    expect(saleApi.payQr.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id, SALE_RESPONSE.total],
+      [SALE_RESPONSE.sale_id, SALE_RESPONSE.total, 'server-qr-key']
+    ]);
+  });
+
+  it('handles an expired QR sale without fabricating payment success', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(
+        of({ sale_id: SALE_RESPONSE.sale_id, status: 'CANCELLED' })
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+    fixture.detectChanges();
+
+    expect(component.paymentState.status).toBe('expired');
+    expect(component.completedQrPayment).toBeNull();
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.statusLabel).toBe('Sale expired');
   });
 
   it('accumulates repeatable cash denominations and displays change', () => {
@@ -330,7 +529,7 @@ describe('PosComponent', () => {
     pendingPayment.complete();
     fixture.detectChanges();
 
-    expect(component.cashPaymentState.status).toBe('paid');
+    expect(component.paymentState.status).toBe('paid');
     expect(component.completedCashPayment?.payment_id).toBe(
       CASH_PAYMENT_RESPONSE.payment_id
     );
@@ -362,7 +561,7 @@ describe('PosComponent', () => {
     component.confirmCashPayment();
     fixture.detectChanges();
 
-    expect(component.cashPaymentState.status).toBe('error');
+    expect(component.paymentState.status).toBe('error');
     expect(component.paymentError?.code).toBe('SALE_ALREADY_PAID');
     expect(
       (fixture.nativeElement as HTMLElement).querySelector(
@@ -419,7 +618,7 @@ describe('PosComponent', () => {
     component.confirmCashPayment();
     fixture.detectChanges();
 
-    expect(component.cashPaymentState.status).toBe('expired');
+    expect(component.paymentState.status).toBe('expired');
     expect(component.completedCashPayment).toBeNull();
     expect(component.activeSale?.status).toBe('CANCELLED');
     expect(component.canAddCash).toBeFalse();
