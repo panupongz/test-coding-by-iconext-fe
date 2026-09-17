@@ -8,11 +8,13 @@ import { API_BASE_URL } from '../config/api-config.token';
 import {
   CashPaymentApiResponse,
   CashPaymentResponse,
-  CreateSaleResponse,
   QrPaymentApiResponse,
-  QrPaymentResponse,
-  CancelSaleResponse
-} from '../models/sale.models';
+  QrPaymentResponse
+} from '../models/payment-api.models';
+import {
+  CancelSaleResponse,
+  CreateSaleResponse
+} from '../models/sale-api.models';
 import { SaleApiService } from './sale-api.service';
 
 describe('SaleApiService', () => {

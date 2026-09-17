@@ -10,13 +10,15 @@ import { By } from '@angular/platform-browser';
 import { Observable, of, Subject, throwError } from 'rxjs';
 
 import {
-  CancelSaleResponse,
   CashPaymentApiResponse,
   CashPaymentResponse,
-  CreateSaleResponse,
   QrPaymentApiResponse,
   QrPaymentResponse
-} from '../../core/models/sale.models';
+} from '../../core/models/payment-api.models';
+import {
+  CancelSaleResponse,
+  CreateSaleResponse
+} from '../../core/models/sale-api.models';
 import {
   CancelSaleOperation,
   CashPaymentOperation,

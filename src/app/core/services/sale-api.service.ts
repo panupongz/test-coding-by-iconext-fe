@@ -4,16 +4,18 @@ import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from '../config/api-config.token';
 import {
-  CancelSaleResponse,
   CashPaymentApiResponse,
   CashPaymentRequest,
-  CreateSaleRequest,
-  CreateSaleResponse,
   PaymentApiResponse,
   PaymentRequest,
   QrPaymentApiResponse,
   QrPaymentRequest
-} from '../models/sale.models';
+} from '../models/payment-api.models';
+import {
+  CancelSaleResponse,
+  CreateSaleRequest,
+  CreateSaleResponse
+} from '../models/sale-api.models';
 
 export interface CreateSaleOperation {
   readonly idempotencyKey: string;

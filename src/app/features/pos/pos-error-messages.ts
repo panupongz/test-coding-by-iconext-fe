@@ -3,17 +3,21 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   CancelSaleApiErrorCode,
   CancelSaleApiErrorResponse,
-  CancelSaleErrorViewModel,
   CreateSaleApiErrorCode,
-  CreateSaleErrorViewModel,
   isCancelSaleApiErrorCode,
   isCreateSaleApiErrorCode,
+  SaleApiErrorResponse
+} from '../../core/models/sale-api.models';
+import {
   isPaymentApiErrorCode,
   PaymentApiErrorCode,
-  PaymentApiErrorResponse,
+  PaymentApiErrorResponse
+} from '../../core/models/payment-api.models';
+import {
+  CancelSaleErrorViewModel,
+  CreateSaleErrorViewModel,
   PaymentErrorViewModel,
-  SaleApiErrorResponse
-} from '../../core/models/sale.models';
+} from './models/pos.models';
 
 const DEFAULT_CREATE_SALE_ERROR: CreateSaleErrorViewModel = {
   code: 'CREATE_SALE_FAILED',

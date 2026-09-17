@@ -31,7 +31,7 @@ Do not combine all three refactors into one uncontrolled rewrite. Preserve exist
 
 ## R-001 — Separate API and POS Models
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 
@@ -60,13 +60,13 @@ The exact split may be adjusted if inspection shows a simpler cohesive structure
 
 ### Acceptance Criteria
 
-- [ ] API DTO/error types are clearly separated from POS UI/view-model/state types.
-- [ ] Existing type shapes and BE contract remain unchanged.
-- [ ] All imports compile cleanly.
-- [ ] No business logic or user-visible behavior is changed.
-- [ ] Existing relevant tests pass.
-- [ ] Angular production build passes.
-- [ ] Senior review confirms no unnecessary abstraction was introduced.
+- [x] API DTO/error types are clearly separated from POS UI/view-model/state types.
+- [x] Existing type shapes and BE contract remain unchanged.
+- [x] All imports compile cleanly.
+- [x] No business logic or user-visible behavior is changed.
+- [x] Existing relevant tests pass.
+- [x] Angular production build passes.
+- [x] Senior review confirms no unnecessary abstraction was introduced.
 
 ---
 

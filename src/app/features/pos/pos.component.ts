@@ -12,20 +12,12 @@ import { FormControl, Validators } from '@angular/forms';
 import { NEVER, Subject, switchMap, takeUntil, timer } from 'rxjs';
 
 import {
-  ActiveSaleViewModel,
-  CancellationState,
-  CancelSaleErrorViewModel,
   CashPaymentResponse,
-  CreateSaleErrorViewModel,
-  CreateSaleResponse,
   PaymentApiResponse,
-  PaymentErrorViewModel,
   PaymentMethod,
-  PaymentState,
-  PosSaleState,
-  QrPaymentResponse,
-  SaleCancellationReason
-} from '../../core/models/sale.models';
+  QrPaymentResponse
+} from '../../core/models/payment-api.models';
+import { CreateSaleResponse } from '../../core/models/sale-api.models';
 import {
   PaymentOperation,
   SaleApiService
@@ -35,6 +27,16 @@ import {
   mapCreateSaleError,
   mapPaymentError
 } from './pos-error-messages';
+import {
+  ActiveSaleViewModel,
+  CancellationState,
+  CancelSaleErrorViewModel,
+  CreateSaleErrorViewModel,
+  PaymentErrorViewModel,
+  PaymentState,
+  PosSaleState,
+  SaleCancellationReason
+} from './models/pos.models';
 
 const READY_STATE: PosSaleState = {
   status: 'ready',

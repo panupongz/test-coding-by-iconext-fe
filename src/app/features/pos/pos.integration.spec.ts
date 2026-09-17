@@ -8,9 +8,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { API_BASE_URL } from '../../core/config/api-config.token';
 import {
   CashPaymentResponse,
-  CreateSaleResponse,
   QrPaymentResponse
-} from '../../core/models/sale.models';
+} from '../../core/models/payment-api.models';
+import { CreateSaleResponse } from '../../core/models/sale-api.models';
 import { SaleApiService } from '../../core/services/sale-api.service';
 import { PosComponent } from './pos.component';
 
