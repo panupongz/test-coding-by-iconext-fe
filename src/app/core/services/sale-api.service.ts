@@ -4,6 +4,8 @@ import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from '../config/api-config.token';
 import {
+  CashPaymentApiResponse,
+  CashPaymentRequest,
   CreateSaleRequest,
   CreateSaleResponse
 } from '../models/sale.models';
@@ -11,6 +13,11 @@ import {
 export interface CreateSaleOperation {
   readonly idempotencyKey: string;
   readonly response$: Observable<CreateSaleResponse>;
+}
+
+export interface CashPaymentOperation {
+  readonly idempotencyKey: string;
+  readonly response$: Observable<CashPaymentApiResponse>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -38,6 +45,29 @@ export class SaleApiService {
       response$: this.http.post<CreateSaleResponse>(this.salesUrl, request, {
         headers
       })
+    };
+  }
+
+  payCash(
+    saleId: string,
+    amountReceived: number,
+    idempotencyKey: string = crypto.randomUUID()
+  ): CashPaymentOperation {
+    const request: CashPaymentRequest = {
+      payment_method: 'CASH',
+      amount_received: amountReceived
+    };
+    const headers = new HttpHeaders({
+      'Idempotency-Key': idempotencyKey
+    });
+
+    return {
+      idempotencyKey,
+      response$: this.http.post<CashPaymentApiResponse>(
+        `${this.salesUrl}/${encodeURIComponent(saleId)}/payment`,
+        request,
+        { headers }
+      )
     };
   }
 }

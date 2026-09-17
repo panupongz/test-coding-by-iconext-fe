@@ -4,8 +4,13 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { Observable, of, Subject, throwError } from 'rxjs';
 
-import { CreateSaleResponse } from '../../core/models/sale.models';
 import {
+  CashPaymentApiResponse,
+  CashPaymentResponse,
+  CreateSaleResponse
+} from '../../core/models/sale.models';
+import {
+  CashPaymentOperation,
   CreateSaleOperation,
   SaleApiService
 } from '../../core/services/sale-api.service';
@@ -28,6 +33,19 @@ const createOperation = (
   idempotencyKey: string = 'create-sale-key'
 ): CreateSaleOperation => ({ idempotencyKey, response$ });
 
+const CASH_PAYMENT_RESPONSE: CashPaymentResponse = {
+  payment_id: '68b2aa0d-1f12-4d06-981a-d5bdad5d8336',
+  payment_method: 'CASH',
+  amount_received: 100,
+  paid_at: '2026-09-17T03:01:00.000Z',
+  change: 40
+};
+
+const cashPaymentOperation = (
+  response$: Observable<CashPaymentApiResponse>,
+  idempotencyKey: string = 'cash-payment-key'
+): CashPaymentOperation => ({ idempotencyKey, response$ });
+
 describe('PosComponent', () => {
   let component: PosComponent;
   let fixture: ComponentFixture<PosComponent>;
@@ -35,7 +53,8 @@ describe('PosComponent', () => {
 
   beforeEach(async () => {
     saleApi = jasmine.createSpyObj<SaleApiService>('SaleApiService', [
-      'createSale'
+      'createSale',
+      'payCash'
     ]);
 
     await TestBed.configureTestingModule({
@@ -227,7 +246,7 @@ describe('PosComponent', () => {
     expect(component.saleState.status).toBe('active');
   });
 
-  it('keeps payment methods disabled until later payment tasks implement them', () => {
+  it('enables cash and keeps QR disabled when a pending sale is active', () => {
     saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
     component.productCodeControl.setValue('P001');
     component.submitProductCode();
@@ -236,11 +255,175 @@ describe('PosComponent', () => {
     const paymentButtons = fixture.debugElement.queryAll(
       By.css('.payment__options button')
     );
+    expect((paymentButtons[0].nativeElement as HTMLButtonElement).disabled)
+      .toBeFalse();
+    expect((paymentButtons[1].nativeElement as HTMLButtonElement).disabled)
+      .toBeTrue();
+  });
+
+  it('accumulates repeatable cash denominations and displays change', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectCashPayment();
+    fixture.detectChanges();
+
+    const denominationButtons = fixture.debugElement.queryAll(
+      By.css('.cash-payment__denominations button')
+    );
+    denominationButtons[0].triggerEventHandler('click');
+    denominationButtons[1].triggerEventHandler('click');
+    denominationButtons[2].triggerEventHandler('click');
+    denominationButtons[0].triggerEventHandler('click');
+    fixture.detectChanges();
+
+    expect(component.amountReceived).toBe(1700);
+    expect(component.changeDue).toBe(1640);
+    expect(component.canConfirmCashPayment).toBeTrue();
     expect(
-      paymentButtons.every(
-        (button) => (button.nativeElement as HTMLButtonElement).disabled
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.cash-payment__change'
+      )?.textContent
+    ).toContain('1,640');
+  });
+
+  it('keeps confirmation disabled until cash received covers the total', () => {
+    const sale = { ...SALE_RESPONSE, total: 600, unit_price: 600 };
+    saleApi.createSale.and.returnValue(createOperation(of(sale)));
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectCashPayment();
+    component.addCash(500);
+    fixture.detectChanges();
+
+    const confirmButton = fixture.debugElement.query(
+      By.css('.cash-payment__confirm')
+    ).nativeElement as HTMLButtonElement;
+    expect(component.canConfirmCashPayment).toBeFalse();
+    expect(confirmButton.disabled).toBeTrue();
+    expect(saleApi.payCash).not.toHaveBeenCalled();
+  });
+
+  it('submits cash once, preserves the payment identifiers, and marks the sale paid', () => {
+    const pendingPayment = new Subject<CashPaymentApiResponse>();
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payCash.and.returnValue(
+      cashPaymentOperation(pendingPayment.asObservable())
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectCashPayment();
+    component.addCash(100);
+
+    component.confirmCashPayment();
+    component.confirmCashPayment();
+
+    expect(saleApi.payCash).toHaveBeenCalledOnceWith(
+      SALE_RESPONSE.sale_id,
+      100
+    );
+    expect(component.isPaymentSubmitting).toBeTrue();
+    expect(component.canReset).toBeFalse();
+    expect(component.canAddCash).toBeFalse();
+
+    pendingPayment.next(CASH_PAYMENT_RESPONSE);
+    pendingPayment.complete();
+    fixture.detectChanges();
+
+    expect(component.cashPaymentState.status).toBe('paid');
+    expect(component.completedCashPayment?.payment_id).toBe(
+      CASH_PAYMENT_RESPONSE.payment_id
+    );
+    expect(component.activeSale?.status).toBe('PAID');
+    expect(component.statusLabel).toBe('Payment complete');
+    expect(component.canConfirmCashPayment).toBeFalse();
+  });
+
+  it('shows a backend business error and allows a safe retry', () => {
+    const backendError = new HttpErrorResponse({
+      status: 409,
+      error: {
+        error: {
+          code: 'SALE_ALREADY_PAID',
+          message: 'รายการขายนี้ชำระเงินแล้ว'
+        }
+      }
+    });
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payCash.and.returnValues(
+      cashPaymentOperation(throwError(() => backendError), 'definite-key'),
+      cashPaymentOperation(of(CASH_PAYMENT_RESPONSE), 'new-key')
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectCashPayment();
+    component.addCash(100);
+
+    component.confirmCashPayment();
+    fixture.detectChanges();
+
+    expect(component.cashPaymentState.status).toBe('error');
+    expect(component.paymentError?.code).toBe('SALE_ALREADY_PAID');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.payment-message--error'
+      )?.textContent
+    ).toContain('รายการขายนี้ชำระเงินแล้ว');
+
+    component.confirmCashPayment();
+    expect(saleApi.payCash.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id, 100],
+      [SALE_RESPONSE.sale_id, 100]
+    ]);
+  });
+
+  it('uses a safe message for network failures and reuses the key on retry', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payCash.and.returnValues(
+      cashPaymentOperation(
+        throwError(() => new HttpErrorResponse({ status: 0 })),
+        'ambiguous-payment-key'
+      ),
+      cashPaymentOperation(of(CASH_PAYMENT_RESPONSE), 'ambiguous-payment-key')
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectCashPayment();
+    component.addCash(100);
+
+    component.confirmCashPayment();
+    expect(component.paymentError?.code).toBe('PAYMENT_FAILED');
+    expect(component.canAddCash).toBeFalse();
+    component.addCash(100);
+    expect(component.amountReceived).toBe(100);
+    component.confirmCashPayment();
+
+    expect(saleApi.payCash.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id, 100],
+      [SALE_RESPONSE.sale_id, 100, 'ambiguous-payment-key']
+    ]);
+  });
+
+  it('handles the backend expired-sale response without creating a payment', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payCash.and.returnValue(
+      cashPaymentOperation(
+        of({ sale_id: SALE_RESPONSE.sale_id, status: 'CANCELLED' })
       )
-    ).toBeTrue();
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectCashPayment();
+    component.addCash(100);
+
+    component.confirmCashPayment();
+    fixture.detectChanges();
+
+    expect(component.cashPaymentState.status).toBe('expired');
+    expect(component.completedCashPayment).toBeNull();
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.canAddCash).toBeFalse();
+    expect(component.statusLabel).toBe('Sale expired');
   });
 
   it('resets a completed sale for a new transaction', () => {

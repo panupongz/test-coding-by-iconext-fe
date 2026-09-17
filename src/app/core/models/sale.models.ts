@@ -51,6 +51,90 @@ export interface CreateSaleErrorViewModel {
   readonly message: string;
 }
 
+export const PAYMENT_API_ERROR_CODES = [
+  'VALIDATION_ERROR',
+  'MALFORMED_JSON',
+  'SALE_NOT_FOUND',
+  'SALE_ALREADY_PAID',
+  'SALE_CANCELLED',
+  'INSUFFICIENT_CASH_AMOUNT',
+  'UNSUPPORTED_PAYMENT_METHOD',
+  'IDEMPOTENCY_KEY_REQUIRED',
+  'IDEMPOTENCY_KEY_TOO_LONG',
+  'IDEMPOTENCY_CONFLICT',
+  'IDEMPOTENCY_FAILED',
+  'INTERNAL_SERVER_ERROR'
+] as const;
+
+export type PaymentApiErrorCode = (typeof PAYMENT_API_ERROR_CODES)[number];
+
+export const isPaymentApiErrorCode = (
+  value: unknown
+): value is PaymentApiErrorCode =>
+  typeof value === 'string' &&
+  PAYMENT_API_ERROR_CODES.some((errorCode) => errorCode === value);
+
+export interface CashPaymentRequest {
+  readonly payment_method: 'CASH';
+  readonly amount_received: number;
+}
+
+export interface CashPaymentResponse {
+  readonly payment_id: string;
+  readonly payment_method: 'CASH';
+  readonly amount_received: number;
+  readonly paid_at: string;
+  readonly change: number;
+}
+
+export interface ExpiredSaleResponse {
+  readonly sale_id: string;
+  readonly status: 'CANCELLED';
+}
+
+export type CashPaymentApiResponse =
+  | CashPaymentResponse
+  | ExpiredSaleResponse;
+
+export interface PaymentErrorViewModel {
+  readonly code: string;
+  readonly message: string;
+}
+
+export interface PaymentApiErrorResponse {
+  readonly error: {
+    readonly code: PaymentApiErrorCode;
+    readonly message: string;
+  };
+}
+
+export type CashPaymentState =
+  | {
+      readonly status: 'idle';
+      readonly payment: null;
+      readonly error: null;
+    }
+  | {
+      readonly status: 'submitting';
+      readonly payment: null;
+      readonly error: null;
+    }
+  | {
+      readonly status: 'paid';
+      readonly payment: CashPaymentResponse;
+      readonly error: null;
+    }
+  | {
+      readonly status: 'expired';
+      readonly payment: null;
+      readonly error: PaymentErrorViewModel;
+    }
+  | {
+      readonly status: 'error';
+      readonly payment: null;
+      readonly error: PaymentErrorViewModel;
+    };
+
 export interface ActiveSaleViewModel {
   readonly saleId: string;
   readonly productCode: string;

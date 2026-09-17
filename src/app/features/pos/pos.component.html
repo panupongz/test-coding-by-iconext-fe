@@ -108,12 +108,79 @@
       </div>
 
       <div class="payment__options" aria-label="Payment methods">
-        <button type="button" disabled aria-describedby="payment-unavailable">Cash</button>
+        <button
+          type="button"
+          [disabled]="!activeSale || activeSale.status !== 'PENDING' || isPaymentSubmitting"
+          [attr.aria-pressed]="selectedPaymentMethod === 'CASH'"
+          (click)="selectCashPayment()"
+        >
+          Cash
+        </button>
         <button type="button" disabled aria-describedby="payment-unavailable">QR payment</button>
       </div>
       <p id="payment-unavailable" class="hint">
-        {{ activeSale ? 'Payment will be available in the next step.' : 'Add a product to continue to payment.' }}
+        {{ activeSale ? 'Choose cash to enter the amount received. QR payment is not yet available.' : 'Add a product to continue to payment.' }}
       </p>
+
+      <section
+        *ngIf="activeSale && selectedPaymentMethod === 'CASH'"
+        class="cash-payment"
+        aria-labelledby="cash-payment-title"
+        [attr.aria-busy]="isPaymentSubmitting"
+      >
+        <div class="pos__heading cash-payment__heading">
+          <div>
+            <h3 id="cash-payment-title">Cash received</h3>
+            <p>Add each banknote as it is received.</p>
+          </div>
+          <strong>{{ amountReceived | currency: 'THB':'symbol-narrow':'1.0-0' }}</strong>
+        </div>
+
+        <div class="payment__options cash-payment__denominations" aria-label="Cash denominations">
+          <button type="button" [disabled]="!canAddCash" (click)="addCash(100)">+100</button>
+          <button type="button" [disabled]="!canAddCash" (click)="addCash(500)">+500</button>
+          <button type="button" [disabled]="!canAddCash" (click)="addCash(1000)">+1,000</button>
+        </div>
+
+        <dl class="state-card cash-payment__summary">
+          <div>
+            <dt>Total</dt>
+            <dd>{{ activeSale.total | currency: 'THB':'symbol-narrow':'1.0-0' }}</dd>
+          </div>
+          <div>
+            <dt>Received</dt>
+            <dd>{{ amountReceived | currency: 'THB':'symbol-narrow':'1.0-0' }}</dd>
+          </div>
+          <div *ngIf="changeDue > 0" class="cash-payment__change">
+            <dt>Change</dt>
+            <dd>{{ changeDue | currency: 'THB':'symbol-narrow':'1.0-0' }}</dd>
+          </div>
+        </dl>
+
+        <p *ngIf="amountReceived < activeSale.total" class="hint" id="cash-payment-hint">
+          Add at least the sale total before confirming payment.
+        </p>
+
+        <div *ngIf="paymentError as apiError" class="state-card payment-message payment-message--error" role="alert">
+          <strong>{{ cashPaymentState.status === 'expired' ? 'Sale expired' : 'Payment could not be completed' }}</strong>
+          <p>{{ apiError.message }}</p>
+        </div>
+
+        <div *ngIf="completedCashPayment as payment" class="state-card payment-message payment-message--success" role="status">
+          <strong>Cash payment complete</strong>
+          <p>Payment ID: {{ payment.payment_id }}</p>
+          <p>Change: {{ payment.change | currency: 'THB':'symbol-narrow':'1.0-0' }}</p>
+        </div>
+
+        <button
+          type="button"
+          class="primary cash-payment__confirm"
+          [disabled]="!canConfirmCashPayment"
+          (click)="confirmCashPayment()"
+        >
+          {{ isPaymentSubmitting ? 'Processing…' : 'Confirm cash payment' }}
+        </button>
+      </section>
     </section>
   </div>
 

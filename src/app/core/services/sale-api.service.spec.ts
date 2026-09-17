@@ -5,7 +5,11 @@ import {
 import { TestBed } from '@angular/core/testing';
 
 import { API_BASE_URL } from '../config/api-config.token';
-import { CreateSaleResponse } from '../models/sale.models';
+import {
+  CashPaymentApiResponse,
+  CashPaymentResponse,
+  CreateSaleResponse
+} from '../models/sale.models';
 import { SaleApiService } from './sale-api.service';
 
 describe('SaleApiService', () => {
@@ -83,5 +87,63 @@ describe('SaleApiService', () => {
       firstOperation.idempotencyKey
     );
     requests.forEach((request) => request.flush({}));
+  });
+
+  it('posts the exact cash-payment request to the sale payment endpoint', () => {
+    const response: CashPaymentResponse = {
+      payment_id: '68b2aa0d-1f12-4d06-981a-d5bdad5d8336',
+      payment_method: 'CASH',
+      amount_received: 100,
+      paid_at: '2026-09-17T03:01:00.000Z',
+      change: 40
+    };
+    let actualResponse: CashPaymentApiResponse | undefined;
+
+    service
+      .payCash('5fe1c13b-b0b4-47d6-8e4f-d0ce39596176', 100)
+      .response$.subscribe((payment) => (actualResponse = payment));
+
+    const request = httpController.expectOne(
+      '/api/v1/sales/5fe1c13b-b0b4-47d6-8e4f-d0ce39596176/payment'
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      payment_method: 'CASH',
+      amount_received: 100
+    });
+    expect(request.request.headers.get('Idempotency-Key')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+
+    request.flush(response, { status: 201, statusText: 'Created' });
+    expect(actualResponse).toEqual(response);
+  });
+
+  it('reuses a supplied cash-payment idempotency key', () => {
+    const replayedPayment: CashPaymentResponse = {
+      payment_id: '68b2aa0d-1f12-4d06-981a-d5bdad5d8336',
+      payment_method: 'CASH',
+      amount_received: 100,
+      paid_at: '2026-09-17T03:01:00.000Z',
+      change: 40
+    };
+    let actualResponse: CashPaymentApiResponse | undefined;
+    const operation = service.payCash(
+      '5fe1c13b-b0b4-47d6-8e4f-d0ce39596176',
+      100,
+      'cash-retry-key'
+    );
+
+    operation.response$.subscribe((payment) => (actualResponse = payment));
+
+    const request = httpController.expectOne(
+      '/api/v1/sales/5fe1c13b-b0b4-47d6-8e4f-d0ce39596176/payment'
+    );
+    expect(operation.idempotencyKey).toBe('cash-retry-key');
+    expect(request.request.headers.get('Idempotency-Key')).toBe(
+      'cash-retry-key'
+    );
+    request.flush(replayedPayment, { status: 200, statusText: 'OK' });
+    expect(actualResponse).toEqual(replayedPayment);
   });
 });
