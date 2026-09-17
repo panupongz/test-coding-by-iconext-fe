@@ -245,7 +245,7 @@ Connect product-code submission to the existing BE create-sale flow.
 
 ## T-004 — Cash Payment
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Implement the cash-payment interaction and submit it through the existing BE payment contract.
@@ -259,16 +259,16 @@ Implement the cash-payment interaction and submit it through the existing BE pay
 - Payment submission and duplicate-action protection.
 
 ### Acceptance Criteria
-- [ ] `+100`, `+500`, and `+1,000` can each be pressed repeatedly.
-- [ ] Received amount accumulates deterministically.
-- [ ] Confirm is unavailable while `amount_received < total`.
-- [ ] Change is displayed correctly when `amount_received > total`.
-- [ ] Cash payment uses `POST /api/v1/sales/:sale_id/payment` and the existing BE contract without changing BE.
-- [ ] Duplicate payment submission is guarded.
-- [ ] Relevant unit/integration tests pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] `+100`, `+500`, and `+1,000` can each be pressed repeatedly.
+- [x] Received amount accumulates deterministically.
+- [x] Confirm is unavailable while `amount_received < total`.
+- [x] Change is displayed correctly when `amount_received > total`.
+- [x] Cash payment uses `POST /api/v1/sales/:sale_id/payment` and the existing BE contract without changing BE.
+- [x] Duplicate payment submission is guarded.
+- [x] Relevant unit/integration tests pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -303,7 +303,7 @@ Implement QR payment using the existing BE payment contract.
 
 ## T-006 — Sale / Error / Expiry Handling
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Make the POS flow resilient to expected API, business, invalid-state, not-found, cancellation, and expiry scenarios.
@@ -402,9 +402,9 @@ Validate the complete FE flow against the existing BE contract and close integra
 | T-001 | Angular 14 Foundation | DONE |
 | T-002 | POS UI | DONE |
 | T-003 | Create Sale | DONE |
-| T-004 | Cash Payment | TODO |
+| T-004 | Cash Payment | DONE |
 | T-005 | QR Payment | DONE |
-| T-006 | Sale / Error / Expiry Handling | TODO |
+| T-006 | Sale / Error / Expiry Handling | DONE |
 | T-007 | Responsive & UX | DONE |
 | T-008 | Testing + Final Integration | TODO |
 
