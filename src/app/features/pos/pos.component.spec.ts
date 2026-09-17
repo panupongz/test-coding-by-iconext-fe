@@ -654,6 +654,93 @@ describe('PosComponent', () => {
     expect(component.canConfirmCashPayment).toBeFalse();
   });
 
+  it('shows Thank You for five seconds, resets all transaction state, and accepts the next sale', fakeAsync(() => {
+    const nextSale: CreateSaleResponse = {
+      ...SALE_RESPONSE,
+      sale_id: '52a44507-4c27-480b-90db-a817c663ae30',
+      product_code: 'P002',
+      name: 'Next Product'
+    };
+    saleApi.createSale.and.returnValues(
+      createOperation(of(SALE_RESPONSE)),
+      createOperation(of(nextSale), 'next-sale-key')
+    );
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(of(QR_PAYMENT_RESPONSE))
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+    fixture.detectChanges();
+
+    const thankYouDialog = (fixture.nativeElement as HTMLElement).querySelector(
+      '.thank-you-backdrop'
+    );
+    expect(component.activeSale?.status).toBe('PAID');
+    expect(component.isThankYouVisible).toBeTrue();
+    expect(component.canReset).toBeFalse();
+    expect(thankYouDialog?.getAttribute('role')).toBe('dialog');
+    expect(thankYouDialog?.textContent).toContain('Thank you');
+    expect(document.activeElement).toBe(thankYouDialog);
+
+    tick(4999);
+    fixture.detectChanges();
+    expect(component.isThankYouVisible).toBeTrue();
+    expect(component.activeSale?.saleId).toBe(SALE_RESPONSE.sale_id);
+
+    tick(1);
+    fixture.detectChanges();
+    tick();
+
+    expect(component.saleState.status).toBe('ready');
+    expect(component.activeSale).toBeNull();
+    expect(component.paymentState.status).toBe('idle');
+    expect(component.selectedPaymentMethod).toBeNull();
+    expect(component.amountReceived).toBe(0);
+    expect(component.productCodeControl.enabled).toBeTrue();
+    expect(component.productCodeControl.value).toBe('');
+    expect(document.activeElement).toBe(
+      fixture.debugElement.query(By.css('#product-code'))
+        .nativeElement as HTMLInputElement
+    );
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.thank-you-backdrop'
+      )
+    ).toBeNull();
+
+    component.productCodeControl.setValue('P002');
+    component.submitProductCode();
+
+    expect(saleApi.createSale.calls.allArgs()).toEqual([['P001'], ['P002']]);
+    expect(component.activeSale?.saleId).toBe(nextSale.sale_id);
+    expect(component.activeSale?.productName).toBe('Next Product');
+    expect(component.paymentState.status).toBe('idle');
+    expect(component.amountReceived).toBe(0);
+    fixture.destroy();
+  }));
+
+  it('cancels the automatic paid reset when the component is destroyed', fakeAsync(() => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(of(QR_PAYMENT_RESPONSE))
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+    component.confirmQrPayment();
+
+    expect(component.isThankYouVisible).toBeTrue();
+
+    fixture.destroy();
+    tick(5000);
+
+    expect(component.paymentState.status).toBe('paid');
+    expect(component.activeSale?.status).toBe('PAID');
+  }));
+
   it('treats the backend already-paid error as a terminal sale state', () => {
     const backendError = new HttpErrorResponse({
       status: 409,

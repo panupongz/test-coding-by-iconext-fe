@@ -4,6 +4,7 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  AfterViewChecked,
   OnDestroy,
   ViewChild
 } from '@angular/core';
@@ -59,6 +60,8 @@ const IDLE_CANCELLATION_STATE: CancellationState = {
   error: null
 };
 
+const THANK_YOU_DURATION_MS = 5000;
+
 interface RetryableCreateSaleAttempt {
   readonly productCode: string;
   readonly idempotencyKey: string;
@@ -83,9 +86,12 @@ interface RetryableCancellationAttempt {
   styleUrls: ['./pos.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class PosComponent implements OnDestroy {
+export class PosComponent implements AfterViewChecked, OnDestroy {
   @ViewChild('productCodeInput')
   private productCodeInput?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('thankYouDialog')
+  private thankYouDialog?: ElementRef<HTMLElement>;
 
   readonly productCodeControl = new FormControl('', {
     nonNullable: true,
@@ -93,11 +99,13 @@ export class PosComponent implements OnDestroy {
   });
   private readonly destroyed$ = new Subject<void>();
   private readonly activeSaleExpiry$ = new Subject<ActiveSaleViewModel | null>();
+  private readonly thankYouReset$ = new Subject<boolean>();
   private retryableCreateSaleAttempt: RetryableCreateSaleAttempt | null = null;
   private retryablePaymentAttempt: RetryablePaymentAttempt | null = null;
   private retryableCancellationAttempt: RetryableCancellationAttempt | null =
     null;
   private saleUnavailable = false;
+  private shouldFocusThankYouDialog = false;
 
   saleState: PosSaleState = READY_STATE;
   paymentState: PaymentState = IDLE_PAYMENT_STATE;
@@ -124,6 +132,15 @@ export class PosComponent implements OnDestroy {
         takeUntil(this.destroyed$)
       )
       .subscribe(() => this.cancelActiveSale('expiry'));
+
+    this.thankYouReset$
+      .pipe(
+        switchMap((shouldReset) =>
+          shouldReset ? timer(THANK_YOU_DURATION_MS) : NEVER
+        ),
+        takeUntil(this.destroyed$)
+      )
+      .subscribe(() => this.clearTransaction());
   }
 
   get isLoading(): boolean {
@@ -170,6 +187,7 @@ export class PosComponent implements OnDestroy {
       !this.isLoading &&
       !this.isPaymentSubmitting &&
       !this.isCancellationSubmitting &&
+      this.paymentState.status !== 'paid' &&
       this.retryableCreateSaleAttempt === null &&
       this.retryablePaymentAttempt === null &&
       (this.saleState.status !== 'ready' ||
@@ -213,6 +231,10 @@ export class PosComponent implements OnDestroy {
 
   get paymentError(): PaymentErrorViewModel | null {
     return this.paymentState.error;
+  }
+
+  get isThankYouVisible(): boolean {
+    return this.paymentState.status === 'paid';
   }
 
   get cancellationError(): CancelSaleErrorViewModel | null {
@@ -428,13 +450,22 @@ export class PosComponent implements OnDestroy {
     this.clearTransaction();
   }
 
+  ngAfterViewChecked(): void {
+    if (this.shouldFocusThankYouDialog && this.isThankYouVisible) {
+      this.shouldFocusThankYouDialog = false;
+      this.thankYouDialog?.nativeElement.focus();
+    }
+  }
+
   private clearTransaction(): void {
     this.activeSaleExpiry$.next(null);
+    this.thankYouReset$.next(false);
 
     this.retryableCreateSaleAttempt = null;
     this.retryablePaymentAttempt = null;
     this.retryableCancellationAttempt = null;
     this.saleUnavailable = false;
+    this.shouldFocusThankYouDialog = false;
     this.saleState = READY_STATE;
     this.paymentState = IDLE_PAYMENT_STATE;
     this.cancellationState = IDLE_CANCELLATION_STATE;
@@ -449,6 +480,8 @@ export class PosComponent implements OnDestroy {
   ngOnDestroy(): void {
     this.destroyed$.next();
     this.destroyed$.complete();
+    this.activeSaleExpiry$.complete();
+    this.thankYouReset$.complete();
   }
 
   private toActiveSale(response: CreateSaleResponse): ActiveSaleViewModel {
@@ -556,6 +589,10 @@ export class PosComponent implements OnDestroy {
             this.updateActiveSaleStatus('CANCELLED');
           }
           this.activeSaleExpiry$.next(null);
+          if (this.paymentState.status === 'paid') {
+            this.shouldFocusThankYouDialog = true;
+            this.thankYouReset$.next(true);
+          }
           this.changeDetector.markForCheck();
         },
         error: (error: unknown) => {

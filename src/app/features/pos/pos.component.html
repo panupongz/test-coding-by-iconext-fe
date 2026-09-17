@@ -300,4 +300,23 @@
       {{ transactionActionLabel }}
     </button>
   </footer>
+
+  <div
+    *ngIf="isThankYouVisible"
+    #thankYouDialog
+    class="thank-you-backdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="thank-you-title"
+    aria-describedby="thank-you-message"
+    tabindex="-1"
+  >
+    <section class="thank-you-card">
+      <p class="thank-you-card__icon" aria-hidden="true">✓</p>
+      <h2 id="thank-you-title">Thank you</h2>
+      <p id="thank-you-message">
+        Payment complete. The next transaction will be ready shortly.
+      </p>
+    </section>
+  </div>
 </section>

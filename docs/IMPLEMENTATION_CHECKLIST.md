@@ -361,7 +361,7 @@ Finalize responsive behavior and transaction UX without changing business rules.
 
 ## T-008 — Testing + Final Integration
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Validate the complete FE flow against the existing BE contract and close integration/regression gaps.
@@ -376,22 +376,22 @@ Validate the complete FE flow against the existing BE contract and close integra
 - Regression/build/test verification.
 
 ### Acceptance Criteria
-- [ ] `POST /api/v1/sales` is integrated and verified.
-- [ ] `POST /api/v1/sales/:sale_id/payment` is integrated and verified for both Cash and QR.
-- [ ] `POST /api/v1/sales/:sale_id/cancel` is integrated and verified for the applicable cancellation/expiry flow.
-- [ ] Product code → Create Sale → product/price → payment works as designed.
-- [ ] Cash path works, including repeated denomination buttons, eligibility, and change.
-- [ ] QR path works with `amount_received = total`.
-- [ ] `PAID` displays the Thank You popup.
-- [ ] Thank You state remains for approximately 5 seconds and then resets the POS.
-- [ ] Product-not-found/error/cancel/expiry paths are covered.
-- [ ] No FE behavior requires a BE contract change.
-- [ ] Relevant automated tests pass.
-- [ ] Production/release build passes where supported by the repository.
-- [ ] No unresolved Senior Review findings remain.
-- [ ] Implementation/integration prompt is preserved verbatim.
-- [ ] Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] `POST /api/v1/sales` is integrated and verified.
+- [x] `POST /api/v1/sales/:sale_id/payment` is integrated and verified for both Cash and QR.
+- [x] `POST /api/v1/sales/:sale_id/cancel` is integrated and verified for the applicable cancellation/expiry flow.
+- [x] Product code → Create Sale → product/price → payment works as designed.
+- [x] Cash path works, including repeated denomination buttons, eligibility, and change.
+- [x] QR path works with `amount_received = total`.
+- [x] `PAID` displays the Thank You popup.
+- [x] Thank You state remains for approximately 5 seconds and then resets the POS.
+- [x] Product-not-found/error/cancel/expiry paths are covered.
+- [x] No FE behavior requires a BE contract change.
+- [x] Relevant automated tests pass.
+- [x] Production/release build passes where supported by the repository.
+- [x] No unresolved Senior Review findings remain.
+- [x] Implementation/integration prompt is preserved verbatim.
+- [x] Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -406,7 +406,7 @@ Validate the complete FE flow against the existing BE contract and close integra
 | T-005 | QR Payment | DONE |
 | T-006 | Sale / Error / Expiry Handling | DONE |
 | T-007 | Responsive & UX | DONE |
-| T-008 | Testing + Final Integration | TODO |
+| T-008 | Testing + Final Integration | DONE |
 
 ## Completion Rule
 
