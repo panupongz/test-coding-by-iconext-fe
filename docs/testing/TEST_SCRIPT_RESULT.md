@@ -1,19 +1,52 @@
 # Frontend Test Script + Result — POS
 
 ## 1. Purpose
-Define the functional/integration regression script for the Angular v14 POS frontend and record the evidence already established by the implementation checklist.
+Define the functional/integration regression script for the Angular v14 POS frontend and record both checklist evidence and the latest executed automated test/build evidence.
 
 ## 2. Test Basis
 - `docs/IMPLEMENTATION_CHECKLIST.md` T-001 through T-008.
 - Backend API source of truth under `/api/v1`.
 - Angular automated component/integration tests in the repository.
+- Local execution evidence captured on 18 Sep 2026 (Windows 10, ChromeHeadless 152.0.0.0).
 
 ## 3. Result Convention
 - **PASS (Checklist Evidence)**: the implementation checklist records the relevant test/final-gate criterion as completed.
+- **PASS (Executed)**: supported by the latest captured local command execution.
+- **PASS with Warning (Executed)**: command completed successfully but emitted a non-blocking warning.
 - **Manual Pending**: requires an operator/browser observation not independently recorded in this document.
-- This document does not fabricate timestamps, screenshots, browser versions, or command output that were not captured here.
+- This document does not fabricate screenshots, tester identity, backend runtime evidence, or manual/UAT results that were not captured.
 
-## 4. Test Scripts and Recorded Results
+## 4. Latest Automated Execution Evidence
+
+### 4.1 `npm test`
+- Execution date: 18 Sep 2026.
+- Environment shown by runner: Windows 10.
+- Test browser: ChromeHeadless 152.0.0.0.
+- Result: **64 of 64 SUCCESS**.
+- Overall status: **PASS (Executed)**.
+
+Captured terminal summary:
+```text
+Chrome Headless 152.0.0.0 (Windows 10): Executed 64 of 64 SUCCESS
+TOTAL: 64 SUCCESS
+```
+
+### 4.2 `npm run build`
+- Angular browser application bundle generation: completed.
+- Asset copy: completed.
+- `index.html` generation: completed.
+- Build hash reported by Angular CLI: `2913b430b33422c3`.
+- Overall status: **PASS with Warning (Executed)**.
+
+Captured non-blocking warning:
+```text
+src/app/features/pos/pos.component.scss exceeded maximum budget.
+Budget 2.00 kB was not met by 1.60 kB with a total of 3.60 kB.
+```
+
+The warning did **not** fail the build. It is retained here as known technical evidence and should not be represented as a warning-free build.
+
+## 5. Test Scripts and Recorded Results
 | ID | Scenario | Steps | Expected Result | Recorded Result |
 |---|---|---|---|---|
 | FE-TC-001 | Product code submission | Enter a valid product code and press Enter | Create-sale request is issued once and active sale/product/total are displayed | PASS (Checklist Evidence) |
@@ -37,16 +70,18 @@ Define the functional/integration regression script for the Angular v14 POS fron
 | FE-TC-019 | Keyboard/focus flow | Complete/recover transaction using product entry flow | Product-code entry remains predictable and focus returns appropriately | PASS (Checklist Evidence) |
 | FE-TC-020 | Responsive UI | Exercise project-supported viewport sizes | Core POS flow remains usable without changing business behavior | PASS (Checklist Evidence) |
 | FE-TC-021 | Three-endpoint integration | Run complete flow covering create, payment, cancel | All three FE-facing backend endpoints integrate without invented contract | PASS (Checklist Evidence) |
-| FE-TC-022 | Automated regression/build | Run relevant automated tests and production/release build | Relevant tests and build pass with no unresolved final-gate finding | PASS (Checklist Evidence) |
+| FE-TC-022 | Automated regression/build | Run `npm test` and `npm run build` | Automated tests and build complete successfully | PASS with Warning (Executed): 64/64 tests SUCCESS; build SUCCESS; one SCSS budget warning |
 
-## 5. API Coverage Matrix
+## 6. API Coverage Matrix
 | Endpoint | Positive Path | Negative/Recovery Path | Status |
 |---|---|---|---|
-| `POST /api/v1/sales` | Create valid sale | validation/not-found/API error | Covered |
-| `POST /api/v1/sales/:sale_id/payment` | Cash + QR payment | payment/business/invalid-state error | Covered |
-| `POST /api/v1/sales/:sale_id/cancel` | Cancel active sale | cancel/expiry/unavailable recovery | Covered |
+| `POST /api/v1/sales` | Create valid sale | validation/not-found/API error | Covered by implementation/checklist evidence |
+| `POST /api/v1/sales/:sale_id/payment` | Cash + QR payment | payment/business/invalid-state error | Covered by implementation/checklist evidence |
+| `POST /api/v1/sales/:sale_id/cancel` | Cancel active sale | cancel/expiry/unavailable recovery | Covered by implementation/checklist evidence |
 
-## 6. Requirement Traceability
+The local `npm test`/`npm run build` execution validates frontend automated regression/build health. It does not by itself prove that a live backend was running during that execution.
+
+## 7. Requirement Traceability
 | Requirement | Test Cases |
 |---|---|
 | Product/Create Sale | FE-TC-001–003 |
@@ -57,5 +92,21 @@ Define the functional/integration regression script for the Angular v14 POS fron
 | UX/Responsive | FE-TC-019–020 |
 | Integration/Regression | FE-TC-021–022 |
 
-## 7. Release Evidence Note
-The project checklist records T-001 through T-008 as DONE, including relevant tests/builds and Senior Review/Final Gate completion. For formal UAT or audited release evidence, attach the actual command output, environment/version details, screenshots where required, tester name, execution date, and defect references to a release-specific test run rather than inventing those values retrospectively.
+## 8. Final Documentation Gate
+Documentation consistency review covers:
+
+`SRS ↔ Design Spec ↔ Source Code ↔ Test Script + Result ↔ User Manual ↔ IMPLEMENTATION_CHECKLIST`
+
+Status after the latest evidence update:
+- SRS consistency: **PASS**.
+- Design Spec consistency: **PASS**.
+- Test Script coverage/traceability: **PASS**.
+- User Manual consistency: **PASS**.
+- Automated frontend tests: **PASS — 64/64 SUCCESS**.
+- Angular build: **PASS WITH WARNING**.
+- Known warning: `pos.component.scss` component style budget exceeded by approximately 1.60 kB (3.60 kB total vs 2.00 kB budget).
+
+**Documentation Gate result: PASS WITH KNOWN NON-BLOCKING WARNING.**
+
+## 9. Release Evidence Note
+The project checklist records T-001 through T-008 as DONE, including relevant tests/builds and Senior Review/Final Gate completion. The latest local execution now adds concrete automated evidence for `npm test` and `npm run build`. For formal UAT/audited release evidence, additionally retain screenshots where required, tester identity, exact source commit, backend/environment versions, manual test execution evidence, and defect references.
