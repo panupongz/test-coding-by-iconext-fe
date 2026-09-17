@@ -72,7 +72,7 @@ The exact split may be adjusted if inspection shows a simpler cohesive structure
 
 ## R-002 — Extract Sale Mapper
 
-**Status:** `BLOCKED_BY_R-001`
+**Status:** `DONE`
 
 ### Goal
 
@@ -98,19 +98,28 @@ A pure function is preferred over an injectable service unless dependency inject
 
 ### Acceptance Criteria
 
-- [ ] `PosComponent` no longer owns API DTO -> active-sale view-model mapping.
-- [ ] Mapper is pure and independently testable.
-- [ ] Existing mapping output remains identical.
-- [ ] Mapper unit tests cover relevant fields.
-- [ ] Existing relevant tests pass.
-- [ ] Angular production build passes.
-- [ ] No API/UI/business behavior changes.
+- [x] `PosComponent` no longer owns API DTO -> active-sale view-model mapping.
+- [x] Mapper is pure and independently testable.
+- [x] Existing mapping output remains identical.
+- [x] Mapper unit tests cover relevant fields.
+- [x] Existing relevant tests pass (56/56).
+- [x] Angular production build passes.
+- [x] No API/UI/business behavior changes.
+
+### Final Gate Evidence
+
+- Senior Review / Final Gate: `PASS`.
+- Full test suite: `56/56 PASS`.
+- Production build: `PASS`.
+- `git diff --check`: `PASS`.
+- No R-002 defect or behavioral regression found.
+- Existing `pos.component.scss` budget warning remains unchanged and non-blocking.
 
 ---
 
 ## R-003 — Extract POS Facade / Application State
 
-**Status:** `BLOCKED_BY_R-002`
+**Status:** `READY`
 
 ### Goal
 
