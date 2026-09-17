@@ -161,7 +161,7 @@ A task must not be marked `DONE` until its acceptance criteria, tests, review/fi
 
 ## T-001 — Angular 14 Foundation
 
-**Status:** `TODO`
+**Status:** `DONE`
 
 ### Goal
 Establish and verify the Angular v14 frontend foundation required for the POS implementation.
@@ -175,16 +175,16 @@ Establish and verify the Angular v14 frontend foundation required for the POS im
 - Ensure the project can install/build/test with the intended toolchain.
 
 ### Acceptance Criteria
-- [ ] Project is confirmed to be Angular v14-compatible.
-- [ ] API base configuration is environment-driven.
-- [ ] Core FE structure follows the Senior Developer standards above.
-- [ ] Architecture/file responsibilities follow the Angular v14 Architecture & File Responsibility rules above.
-- [ ] API configuration is ready for the `/api/v1` BE contract without hard-coded host/port in components.
-- [ ] No unnecessary dependency or architecture rewrite is introduced.
-- [ ] Relevant build/tests pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] Project is confirmed to be Angular v14-compatible.
+- [x] API base configuration is environment-driven.
+- [x] Core FE structure follows the Senior Developer standards above.
+- [x] Architecture/file responsibilities follow the Angular v14 Architecture & File Responsibility rules above.
+- [x] API configuration is ready for the `/api/v1` BE contract without hard-coded host/port in components.
+- [x] No unnecessary dependency or architecture rewrite is introduced.
+- [x] Relevant build/tests pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 
@@ -399,7 +399,7 @@ Validate the complete FE flow against the existing BE contract and close integra
 
 | Task | Description | Status |
 |---|---|---|
-| T-001 | Angular 14 Foundation | TODO |
+| T-001 | Angular 14 Foundation | DONE |
 | T-002 | POS UI | TODO |
 | T-003 | Create Sale | TODO |
 | T-004 | Cash Payment | TODO |
