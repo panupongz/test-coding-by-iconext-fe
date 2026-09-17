@@ -10,7 +10,8 @@ import {
   CashPaymentResponse,
   CreateSaleResponse,
   QrPaymentApiResponse,
-  QrPaymentResponse
+  QrPaymentResponse,
+  CancelSaleResponse
 } from '../models/sale.models';
 import { SaleApiService } from './sale-api.service';
 
@@ -201,5 +202,54 @@ describe('SaleApiService', () => {
       'qr-retry-key'
     );
     request.flush(response, { status: 200, statusText: 'OK' });
+  });
+
+  it('posts a bodyless cancel request with an idempotency key', () => {
+    const response: CancelSaleResponse = {
+      sale_id: '5fe1c13b-b0b4-47d6-8e4f-d0ce39596176',
+      status: 'CANCELLED'
+    };
+    let actualResponse: CancelSaleResponse | undefined;
+
+    service
+      .cancelSale(response.sale_id)
+      .response$.subscribe((cancelledSale) => (actualResponse = cancelledSale));
+
+    const request = httpController.expectOne(
+      '/api/v1/sales/5fe1c13b-b0b4-47d6-8e4f-d0ce39596176/cancel'
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    expect(request.request.headers.has('Content-Type')).toBeFalse();
+    expect(request.request.headers.get('Idempotency-Key')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+
+    request.flush(response, { status: 200, statusText: 'OK' });
+    expect(actualResponse).toEqual(response);
+  });
+
+  it('reuses a supplied cancel-sale idempotency key', () => {
+    const operation = service.cancelSale(
+      '5fe1c13b-b0b4-47d6-8e4f-d0ce39596176',
+      'cancel-retry-key'
+    );
+
+    operation.response$.subscribe();
+
+    const request = httpController.expectOne(
+      '/api/v1/sales/5fe1c13b-b0b4-47d6-8e4f-d0ce39596176/cancel'
+    );
+    expect(operation.idempotencyKey).toBe('cancel-retry-key');
+    expect(request.request.headers.get('Idempotency-Key')).toBe(
+      'cancel-retry-key'
+    );
+    request.flush(
+      {
+        sale_id: '5fe1c13b-b0b4-47d6-8e4f-d0ce39596176',
+        status: 'CANCELLED'
+      },
+      { status: 200, statusText: 'OK' }
+    );
   });
 });

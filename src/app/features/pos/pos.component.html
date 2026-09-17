@@ -49,7 +49,11 @@
       </form>
     </section>
 
-    <section class="panel" aria-labelledby="sale-summary-title" [attr.aria-busy]="isLoading">
+    <section
+      class="panel"
+      aria-labelledby="sale-summary-title"
+      [attr.aria-busy]="isLoading || isCancellationSubmitting"
+    >
       <div class="section-heading">
         <span class="step" aria-hidden="true">2</span>
         <div>
@@ -81,6 +85,26 @@
             <dd>{{ sale.total | currency: 'THB':'symbol-narrow':'1.0-0' }}</dd>
           </div>
         </dl>
+      </div>
+
+      <div
+        *ngIf="saleStatusMessage as message"
+        class="state-card sale-status-message"
+        [class.payment-message--success]="activeSale?.status === 'CANCELLED' && cancellationState.reason === 'user'"
+        [class.payment-message--error]="activeSale?.status !== 'CANCELLED' || cancellationState.reason !== 'user'"
+        role="status"
+      >
+        <strong>{{ activeSale?.status === 'PAID' ? 'สถานะรายการขาย' : 'รายการขายสิ้นสุดแล้ว' }}</strong>
+        <p>{{ message }}</p>
+      </div>
+
+      <div
+        *ngIf="cancellationError as apiError"
+        class="state-card payment-message payment-message--error"
+        role="alert"
+      >
+        <strong>ไม่สามารถยกเลิกรายการขายได้</strong>
+        <p>{{ apiError.message }}</p>
       </div>
 
       <div *ngIf="createSaleError as apiError" class="state-card state-card--error" role="alert">
@@ -126,7 +150,7 @@
         </button>
       </div>
       <p id="payment-unavailable" class="hint">
-        {{ activeSale ? 'Choose cash or QR payment to continue.' : 'Add a product to continue to payment.' }}
+        {{ canSelectPaymentMethod ? 'Choose cash or QR payment to continue.' : (activeSale ? 'Payment is unavailable for the current sale state.' : 'Add a product to continue to payment.') }}
       </p>
 
       <section
@@ -234,7 +258,7 @@
 
   <footer class="pos__actions">
     <button type="button" class="secondary" [disabled]="!canReset" (click)="resetTransaction()">
-      Reset transaction
+      {{ transactionActionLabel }}
     </button>
   </footer>
 </section>

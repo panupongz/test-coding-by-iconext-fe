@@ -318,16 +318,16 @@ Make the POS flow resilient to expected API, business, invalid-state, not-found,
 - Safe user-facing error messages.
 
 ### Acceptance Criteria
-- [ ] Product-not-found has a clear recoverable UI state.
-- [ ] API/business errors do not leave the POS stuck in an inconsistent state.
-- [ ] Explicit cancellation uses `POST /api/v1/sales/:sale_id/cancel` according to the BE contract.
-- [ ] Expiry is handled according to the BE contract/state and does not fake a successful cancellation locally.
-- [ ] Retry/reset behavior cannot accidentally duplicate a transaction.
-- [ ] Technical details are not unnecessarily exposed to the user.
-- [ ] Relevant negative-path tests pass.
-- [ ] Implementation prompt is preserved verbatim.
-- [ ] Senior Review / Final Gate passes.
-- [ ] Prompt audit and checklist are updated.
+- [x] Product-not-found has a clear recoverable UI state.
+- [x] API/business errors do not leave the POS stuck in an inconsistent state.
+- [x] Explicit cancellation uses `POST /api/v1/sales/:sale_id/cancel` according to the BE contract.
+- [x] Expiry is handled according to the BE contract/state and does not fake a successful cancellation locally.
+- [x] Retry/reset behavior cannot accidentally duplicate a transaction.
+- [x] Technical details are not unnecessarily exposed to the user.
+- [x] Relevant negative-path tests pass.
+- [x] Implementation prompt is preserved verbatim.
+- [x] Senior Review / Final Gate passes.
+- [x] Prompt audit and checklist are updated.
 
 ---
 

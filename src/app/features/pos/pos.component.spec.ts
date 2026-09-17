@@ -1,10 +1,16 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  fakeAsync,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { Observable, of, Subject, throwError } from 'rxjs';
 
 import {
+  CancelSaleResponse,
   CashPaymentApiResponse,
   CashPaymentResponse,
   CreateSaleResponse,
@@ -12,6 +18,7 @@ import {
   QrPaymentResponse
 } from '../../core/models/sale.models';
 import {
+  CancelSaleOperation,
   CashPaymentOperation,
   CreateSaleOperation,
   QrPaymentOperation,
@@ -28,7 +35,7 @@ const SALE_RESPONSE: CreateSaleResponse = {
   total: 60,
   status: 'PENDING',
   created_at: '2026-09-17T00:00:00.000Z',
-  expires_at: '2026-09-17T00:05:00.000Z'
+  expires_at: new Date(Date.now() + 60_000).toISOString()
 };
 
 const createOperation = (
@@ -61,6 +68,11 @@ const qrPaymentOperation = (
   idempotencyKey: string = 'qr-payment-key'
 ): QrPaymentOperation => ({ idempotencyKey, response$ });
 
+const cancelSaleOperation = (
+  response$: Observable<CancelSaleResponse>,
+  idempotencyKey: string = 'cancel-sale-key'
+): CancelSaleOperation => ({ idempotencyKey, response$ });
+
 describe('PosComponent', () => {
   let component: PosComponent;
   let fixture: ComponentFixture<PosComponent>;
@@ -70,7 +82,8 @@ describe('PosComponent', () => {
     saleApi = jasmine.createSpyObj<SaleApiService>('SaleApiService', [
       'createSale',
       'payCash',
-      'payQr'
+      'payQr',
+      'cancelSale'
     ]);
 
     await TestBed.configureTestingModule({
@@ -157,6 +170,7 @@ describe('PosComponent', () => {
     component.productCodeControl.setValue('P001');
 
     component.submitProductCode();
+    expect(component.canReset).toBeFalse();
     component.submitProductCode();
     fixture.detectChanges();
 
@@ -230,6 +244,8 @@ describe('PosComponent', () => {
     component.productCodeControl.setValue('P001');
 
     component.submitProductCode();
+    expect(component.canReset).toBeFalse();
+    expect(component.productCodeControl.disabled).toBeTrue();
     component.submitProductCode();
 
     expect(saleApi.createSale.calls.allArgs()).toEqual([
@@ -275,6 +291,33 @@ describe('PosComponent', () => {
       .toBeFalse();
     expect((paymentButtons[1].nativeElement as HTMLButtonElement).disabled)
       .toBeFalse();
+  });
+
+  it('honors a cancelled state returned by a create-sale replay', () => {
+    saleApi.createSale.and.returnValue(
+      createOperation(of({ ...SALE_RESPONSE, status: 'CANCELLED' }))
+    );
+    component.productCodeControl.setValue('P001');
+
+    component.submitProductCode();
+    fixture.detectChanges();
+
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.canSelectPaymentMethod).toBeFalse();
+    expect(component.saleStatusMessage).toContain('หมดอายุหรือถูกยกเลิก');
+  });
+
+  it('honors a paid state returned by a create-sale replay', () => {
+    saleApi.createSale.and.returnValue(
+      createOperation(of({ ...SALE_RESPONSE, status: 'PAID' }))
+    );
+    component.productCodeControl.setValue('P001');
+
+    component.submitProductCode();
+
+    expect(component.activeSale?.status).toBe('PAID');
+    expect(component.canSelectPaymentMethod).toBeFalse();
+    expect(component.saleStatusMessage).toContain('ชำระเงินแล้ว');
   });
 
   it('shows the QR payment UI only after QR is selected', () => {
@@ -333,7 +376,7 @@ describe('PosComponent', () => {
     expect(component.paymentState.status).toBe('paid');
     expect(component.completedQrPayment).toEqual(QR_PAYMENT_RESPONSE);
     expect(component.activeSale?.status).toBe('PAID');
-    expect(component.statusLabel).toBe('Payment complete');
+    expect(component.statusLabel).toBe('ชำระเงินสำเร็จ');
     expect(
       (fixture.nativeElement as HTMLElement).querySelector(
         '.payment-message--success'
@@ -369,13 +412,40 @@ describe('PosComponent', () => {
       (fixture.nativeElement as HTMLElement).querySelector(
         '.payment-message--error'
       )?.textContent
-    ).toContain('QR amount must equal the sale total');
+    ).toContain('ยอดชำระ QR ไม่ตรงกับยอดรวม');
 
     component.confirmQrPayment();
     expect(saleApi.payQr.calls.allArgs()).toEqual([
       [SALE_RESPONSE.sale_id, SALE_RESPONSE.total],
       [SALE_RESPONSE.sale_id, SALE_RESPONSE.total]
     ]);
+  });
+
+  it('clears a method-specific payment error when switching payment methods', () => {
+    const qrError = new HttpErrorResponse({
+      status: 400,
+      error: {
+        error: {
+          code: 'QR_AMOUNT_MISMATCH',
+          message: 'ยอดชำระ QR ต้องเท่ากับยอดรวม'
+        }
+      }
+    });
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(throwError(() => qrError))
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+    component.confirmQrPayment();
+
+    expect(component.paymentError?.code).toBe('QR_AMOUNT_MISMATCH');
+
+    component.selectCashPayment();
+
+    expect(component.selectedPaymentMethod).toBe('CASH');
+    expect(component.paymentError).toBeNull();
   });
 
   it('uses a safe QR network error and reuses the ambiguous attempt key', () => {
@@ -430,7 +500,7 @@ describe('PosComponent', () => {
     component.confirmQrPayment();
     expect(component.paymentError).toEqual({
       code: 'INTERNAL_SERVER_ERROR',
-      message: 'Unable to process the payment'
+      message: 'ไม่สามารถดำเนินการชำระเงินได้ กรุณาลองอีกครั้ง'
     });
     component.confirmQrPayment();
 
@@ -457,7 +527,7 @@ describe('PosComponent', () => {
     expect(component.paymentState.status).toBe('expired');
     expect(component.completedQrPayment).toBeNull();
     expect(component.activeSale?.status).toBe('CANCELLED');
-    expect(component.statusLabel).toBe('Sale expired');
+    expect(component.statusLabel).toBe('รายการขายหมดอายุ');
   });
 
   it('accumulates repeatable cash denominations and displays change', () => {
@@ -534,11 +604,11 @@ describe('PosComponent', () => {
       CASH_PAYMENT_RESPONSE.payment_id
     );
     expect(component.activeSale?.status).toBe('PAID');
-    expect(component.statusLabel).toBe('Payment complete');
+    expect(component.statusLabel).toBe('ชำระเงินสำเร็จ');
     expect(component.canConfirmCashPayment).toBeFalse();
   });
 
-  it('shows a backend business error and allows a safe retry', () => {
+  it('treats the backend already-paid error as a terminal sale state', () => {
     const backendError = new HttpErrorResponse({
       status: 409,
       error: {
@@ -571,9 +641,10 @@ describe('PosComponent', () => {
 
     component.confirmCashPayment();
     expect(saleApi.payCash.calls.allArgs()).toEqual([
-      [SALE_RESPONSE.sale_id, 100],
       [SALE_RESPONSE.sale_id, 100]
     ]);
+    expect(component.activeSale?.status).toBe('PAID');
+    expect(component.canConfirmCashPayment).toBeFalse();
   });
 
   it('uses a safe message for network failures and reuses the key on retry', () => {
@@ -622,13 +693,25 @@ describe('PosComponent', () => {
     expect(component.completedCashPayment).toBeNull();
     expect(component.activeSale?.status).toBe('CANCELLED');
     expect(component.canAddCash).toBeFalse();
-    expect(component.statusLabel).toBe('Sale expired');
+    expect(component.statusLabel).toBe('รายการขายหมดอายุ');
   });
 
-  it('resets a completed sale for a new transaction', () => {
+  it('cancels an active sale through the backend before resetting it', () => {
     saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(
+        of({ sale_id: SALE_RESPONSE.sale_id, status: 'CANCELLED' })
+      )
+    );
     component.productCodeControl.setValue('P001');
     component.submitProductCode();
+
+    component.resetTransaction();
+    fixture.detectChanges();
+
+    expect(saleApi.cancelSale).toHaveBeenCalledOnceWith(SALE_RESPONSE.sale_id);
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.saleStatusMessage).toContain('ยกเลิก');
 
     component.resetTransaction();
     fixture.detectChanges();
@@ -639,7 +722,283 @@ describe('PosComponent', () => {
     expect(component.productCodeControl.value).toBe('');
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.status')?.textContent
-    ).toContain('Ready for a new sale');
+    ).toContain('พร้อมสร้างรายการขายใหม่');
+  });
+
+  it('prevents duplicate cancellation while the request is in progress', () => {
+    const pendingCancellation = new Subject<CancelSaleResponse>();
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(pendingCancellation.asObservable())
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+
+    component.resetTransaction();
+    component.resetTransaction();
+
+    expect(saleApi.cancelSale).toHaveBeenCalledOnceWith(SALE_RESPONSE.sale_id);
+    expect(component.isCancellationSubmitting).toBeTrue();
+    expect(component.canReset).toBeFalse();
+    expect(component.canSelectPaymentMethod).toBeFalse();
+
+    pendingCancellation.next({
+      sale_id: SALE_RESPONSE.sale_id,
+      status: 'CANCELLED'
+    });
+    pendingCancellation.complete();
+
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.cancellationState.status).toBe('cancelled');
+  });
+
+  it('reuses the cancellation key after an outcome-ambiguous server failure', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.cancelSale.and.returnValues(
+      cancelSaleOperation(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 500,
+              error: {
+                error: {
+                  code: 'INTERNAL_SERVER_ERROR',
+                  message: 'เกิดข้อผิดพลาดภายในระบบ'
+                }
+              }
+            })
+        ),
+        'ambiguous-cancel-key'
+      ),
+      cancelSaleOperation(
+        of({ sale_id: SALE_RESPONSE.sale_id, status: 'CANCELLED' }),
+        'ambiguous-cancel-key'
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+
+    component.resetTransaction();
+    expect(component.cancellationState.status).toBe('error');
+    expect(component.activeSale?.status).toBe('PENDING');
+    expect(component.canSelectPaymentMethod).toBeFalse();
+
+    component.resetTransaction();
+
+    expect(saleApi.cancelSale.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id],
+      [SALE_RESPONSE.sale_id, 'ambiguous-cancel-key']
+    ]);
+    expect(component.activeSale?.status).toBe('CANCELLED');
+  });
+
+  it('handles cancel 404 as unavailable and allows a safe local reset', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 404,
+              error: {
+                error: {
+                  code: 'SALE_NOT_FOUND',
+                  message: 'ไม่พบรายการขาย'
+                }
+              }
+            })
+        )
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+
+    component.resetTransaction();
+
+    expect(component.cancellationError?.code).toBe('SALE_NOT_FOUND');
+    expect(component.saleStatusMessage).toContain('ไม่พบรายการขาย');
+    expect(component.canSelectPaymentMethod).toBeFalse();
+    expect(component.transactionActionLabel).toBe('เริ่มรายการใหม่');
+
+    component.resetTransaction();
+    expect(component.saleState.status).toBe('ready');
+    expect(saleApi.cancelSale).toHaveBeenCalledTimes(1);
+  });
+
+  it('synchronizes a cancel 409 paid response without faking cancellation', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: {
+                error: {
+                  code: 'SALE_ALREADY_PAID',
+                  message: 'รายการขายนี้ชำระเงินแล้ว'
+                }
+              }
+            })
+        )
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+
+    component.resetTransaction();
+
+    expect(component.activeSale?.status).toBe('PAID');
+    expect(component.cancellationState.status).toBe('error');
+    expect(component.saleStatusMessage).toContain('ชำระเงินแล้ว');
+    expect(component.canSelectPaymentMethod).toBeFalse();
+  });
+
+  it('shows a safe Thai message for a cancel 400 and retries with a new key', () => {
+    const validationError = new HttpErrorResponse({
+      status: 400,
+      error: {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'ข้อมูลคำขอไม่ถูกต้อง'
+        }
+      }
+    });
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.cancelSale.and.returnValues(
+      cancelSaleOperation(throwError(() => validationError), 'failed-key'),
+      cancelSaleOperation(
+        of({ sale_id: SALE_RESPONSE.sale_id, status: 'CANCELLED' }),
+        'new-key'
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+
+    component.resetTransaction();
+
+    expect(component.cancellationError?.message).toContain(
+      'ไม่สามารถส่งคำขอยกเลิก'
+    );
+
+    component.resetTransaction();
+
+    expect(saleApi.cancelSale.calls.allArgs()).toEqual([
+      [SALE_RESPONSE.sale_id],
+      [SALE_RESPONSE.sale_id]
+    ]);
+    expect(component.activeSale?.status).toBe('CANCELLED');
+  });
+
+  it('uses the backend cancel flow when the active sale reaches expiry', fakeAsync(() => {
+    const expiringSale: CreateSaleResponse = {
+      ...SALE_RESPONSE,
+      expires_at: new Date(Date.now() + 1000).toISOString()
+    };
+    saleApi.createSale.and.returnValue(createOperation(of(expiringSale)));
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(
+        of({ sale_id: expiringSale.sale_id, status: 'CANCELLED' })
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+
+    tick(1000);
+
+    expect(saleApi.cancelSale).toHaveBeenCalledOnceWith(expiringSale.sale_id);
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.paymentState.status).toBe('expired');
+    expect(component.cancellationState.reason).toBe('expiry');
+  }));
+
+  it('lets an in-flight payment resolve expiry without starting a competing cancellation', fakeAsync(() => {
+    const expiringSale: CreateSaleResponse = {
+      ...SALE_RESPONSE,
+      expires_at: new Date(Date.now() + 1000).toISOString()
+    };
+    const pendingPayment = new Subject<QrPaymentApiResponse>();
+    saleApi.createSale.and.returnValue(createOperation(of(expiringSale)));
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(pendingPayment.asObservable())
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+    component.confirmQrPayment();
+
+    tick(1000);
+
+    expect(saleApi.cancelSale).not.toHaveBeenCalled();
+    expect(component.isPaymentSubmitting).toBeTrue();
+
+    pendingPayment.next({
+      sale_id: expiringSale.sale_id,
+      status: 'CANCELLED'
+    });
+    pendingPayment.complete();
+
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.paymentState.status).toBe('expired');
+  }));
+
+  it('does not let an expiry timer duplicate or outlive a user cancellation', fakeAsync(() => {
+    const expiringSale: CreateSaleResponse = {
+      ...SALE_RESPONSE,
+      expires_at: new Date(Date.now() + 1000).toISOString()
+    };
+    const pendingCancellation = new Subject<CancelSaleResponse>();
+    saleApi.createSale.and.returnValue(createOperation(of(expiringSale)));
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(pendingCancellation.asObservable())
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.resetTransaction();
+
+    tick(1000);
+
+    expect(saleApi.cancelSale).toHaveBeenCalledTimes(1);
+
+    pendingCancellation.next({
+      sale_id: expiringSale.sale_id,
+      status: 'CANCELLED'
+    });
+    pendingCancellation.complete();
+    component.resetTransaction();
+    tick(1000);
+
+    expect(component.saleState.status).toBe('ready');
+    expect(saleApi.cancelSale).toHaveBeenCalledTimes(1);
+  }));
+
+  it('blocks further actions when payment reports a cancelled sale', () => {
+    saleApi.createSale.and.returnValue(createOperation(of(SALE_RESPONSE)));
+    saleApi.payQr.and.returnValue(
+      qrPaymentOperation(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: {
+                error: {
+                  code: 'SALE_CANCELLED',
+                  message: 'รายการขายนี้ถูกยกเลิกแล้ว'
+                }
+              }
+            })
+        )
+      )
+    );
+    component.productCodeControl.setValue('P001');
+    component.submitProductCode();
+    component.selectQrPayment();
+
+    component.confirmQrPayment();
+
+    expect(component.activeSale?.status).toBe('CANCELLED');
+    expect(component.canConfirmQrPayment).toBeFalse();
+    expect(component.paymentError?.message).toContain('ถูกยกเลิก');
   });
 
   it('shows status text that matches active and recoverable error states', () => {
@@ -649,20 +1008,26 @@ describe('PosComponent', () => {
         throwError(() => new HttpErrorResponse({ status: 0 }))
       )
     );
+    saleApi.cancelSale.and.returnValue(
+      cancelSaleOperation(
+        of({ sale_id: SALE_RESPONSE.sale_id, status: 'CANCELLED' })
+      )
+    );
     component.productCodeControl.setValue('P001');
 
     component.submitProductCode();
     fixture.detectChanges();
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.status')?.textContent
-    ).toContain('Sale ready for payment');
+    ).toContain('พร้อมรับชำระเงิน');
 
+    component.resetTransaction();
     component.resetTransaction();
     component.productCodeControl.setValue('P001');
     component.submitProductCode();
     fixture.detectChanges();
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.status')?.textContent
-    ).toContain('Ready to retry');
+    ).toContain('พร้อมลองอีกครั้ง');
   });
 });

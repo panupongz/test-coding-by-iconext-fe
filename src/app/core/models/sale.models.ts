@@ -111,6 +111,8 @@ export interface ExpiredSaleResponse {
   readonly status: 'CANCELLED';
 }
 
+export type CancelSaleResponse = ExpiredSaleResponse;
+
 export type CashPaymentApiResponse =
   | CashPaymentResponse
   | ExpiredSaleResponse;
@@ -130,6 +132,62 @@ export interface PaymentApiErrorResponse {
     readonly message: string;
   };
 }
+
+export const CANCEL_SALE_API_ERROR_CODES = [
+  'VALIDATION_ERROR',
+  'SALE_NOT_FOUND',
+  'SALE_ALREADY_PAID',
+  'IDEMPOTENCY_KEY_REQUIRED',
+  'IDEMPOTENCY_KEY_TOO_LONG',
+  'IDEMPOTENCY_CONFLICT',
+  'IDEMPOTENCY_FAILED',
+  'INTERNAL_SERVER_ERROR'
+] as const;
+
+export type CancelSaleApiErrorCode =
+  (typeof CANCEL_SALE_API_ERROR_CODES)[number];
+
+export const isCancelSaleApiErrorCode = (
+  value: unknown
+): value is CancelSaleApiErrorCode =>
+  typeof value === 'string' &&
+  CANCEL_SALE_API_ERROR_CODES.some((errorCode) => errorCode === value);
+
+export interface CancelSaleApiErrorResponse {
+  readonly error: {
+    readonly code: CancelSaleApiErrorCode;
+    readonly message: string;
+  };
+}
+
+export interface CancelSaleErrorViewModel {
+  readonly code: string;
+  readonly message: string;
+}
+
+export type SaleCancellationReason = 'user' | 'expiry';
+
+export type CancellationState =
+  | {
+      readonly status: 'idle';
+      readonly reason: null;
+      readonly error: null;
+    }
+  | {
+      readonly status: 'submitting';
+      readonly reason: SaleCancellationReason;
+      readonly error: null;
+    }
+  | {
+      readonly status: 'cancelled';
+      readonly reason: SaleCancellationReason;
+      readonly error: null;
+    }
+  | {
+      readonly status: 'error';
+      readonly reason: SaleCancellationReason;
+      readonly error: CancelSaleErrorViewModel;
+    };
 
 export type PaymentState =
   | {

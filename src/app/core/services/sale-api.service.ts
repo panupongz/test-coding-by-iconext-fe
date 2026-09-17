@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import { API_BASE_URL } from '../config/api-config.token';
 import {
+  CancelSaleResponse,
   CashPaymentApiResponse,
   CashPaymentRequest,
   CreateSaleRequest,
@@ -29,6 +30,11 @@ export interface PaymentOperation<
 export type CashPaymentOperation = PaymentOperation<CashPaymentApiResponse>;
 
 export type QrPaymentOperation = PaymentOperation<QrPaymentApiResponse>;
+
+export interface CancelSaleOperation {
+  readonly idempotencyKey: string;
+  readonly response$: Observable<CancelSaleResponse>;
+}
 
 @Injectable({ providedIn: 'root' })
 export class SaleApiService {
@@ -82,6 +88,24 @@ export class SaleApiService {
     };
 
     return this.pay<QrPaymentApiResponse>(saleId, request, idempotencyKey);
+  }
+
+  cancelSale(
+    saleId: string,
+    idempotencyKey: string = crypto.randomUUID()
+  ): CancelSaleOperation {
+    const headers = new HttpHeaders({
+      'Idempotency-Key': idempotencyKey
+    });
+
+    return {
+      idempotencyKey,
+      response$: this.http.request<CancelSaleResponse>(
+        'POST',
+        `${this.salesUrl}/${encodeURIComponent(saleId)}/cancel`,
+        { headers }
+      )
+    };
   }
 
   private pay<TResponse extends PaymentApiResponse>(

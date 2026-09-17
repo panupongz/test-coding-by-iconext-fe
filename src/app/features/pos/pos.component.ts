@@ -6,28 +6,32 @@ import {
   OnDestroy
 } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { Subject, takeUntil } from 'rxjs';
+import { NEVER, Subject, switchMap, takeUntil, timer } from 'rxjs';
 
 import {
   ActiveSaleViewModel,
+  CancellationState,
+  CancelSaleErrorViewModel,
   CashPaymentResponse,
   CreateSaleErrorViewModel,
   CreateSaleResponse,
-  isCreateSaleApiErrorCode,
-  isPaymentApiErrorCode,
   PaymentApiResponse,
-  PaymentApiErrorResponse,
   PaymentErrorViewModel,
   PaymentMethod,
   PaymentState,
   PosSaleState,
   QrPaymentResponse,
-  SaleApiErrorResponse
+  SaleCancellationReason
 } from '../../core/models/sale.models';
 import {
   PaymentOperation,
   SaleApiService
 } from '../../core/services/sale-api.service';
+import {
+  mapCancellationError,
+  mapCreateSaleError,
+  mapPaymentError
+} from './pos-error-messages';
 
 const READY_STATE: PosSaleState = {
   status: 'ready',
@@ -36,25 +40,21 @@ const READY_STATE: PosSaleState = {
   error: null
 };
 
-const DEFAULT_CREATE_SALE_ERROR: CreateSaleErrorViewModel = {
-  code: 'CREATE_SALE_FAILED',
-  message: 'Unable to create the sale. Please try again.'
-};
-
 const IDLE_PAYMENT_STATE: PaymentState = {
   status: 'idle',
   payment: null,
   error: null
 };
 
-const DEFAULT_PAYMENT_ERROR: PaymentErrorViewModel = {
-  code: 'PAYMENT_FAILED',
-  message: 'Unable to process the payment. Please try again.'
-};
-
 const EXPIRED_SALE_ERROR: PaymentErrorViewModel = {
   code: 'SALE_EXPIRED',
-  message: 'This sale has expired. Reset the transaction to start again.'
+  message: 'รายการขายหมดอายุแล้ว กรุณาเริ่มรายการใหม่'
+};
+
+const IDLE_CANCELLATION_STATE: CancellationState = {
+  status: 'idle',
+  reason: null,
+  error: null
 };
 
 interface RetryableCreateSaleAttempt {
@@ -66,6 +66,12 @@ interface RetryablePaymentAttempt {
   readonly saleId: string;
   readonly paymentMethod: PaymentMethod;
   readonly amountReceived: number;
+  readonly idempotencyKey: string;
+}
+
+interface RetryableCancellationAttempt {
+  readonly saleId: string;
+  readonly reason: SaleCancellationReason;
   readonly idempotencyKey: string;
 }
 
@@ -81,18 +87,39 @@ export class PosComponent implements OnDestroy {
     validators: [Validators.required, Validators.pattern(/^\s*P\d{3}\s*$/)]
   });
   private readonly destroyed$ = new Subject<void>();
+  private readonly activeSaleExpiry$ = new Subject<ActiveSaleViewModel | null>();
   private retryableCreateSaleAttempt: RetryableCreateSaleAttempt | null = null;
   private retryablePaymentAttempt: RetryablePaymentAttempt | null = null;
+  private retryableCancellationAttempt: RetryableCancellationAttempt | null =
+    null;
+  private saleUnavailable = false;
 
   saleState: PosSaleState = READY_STATE;
   paymentState: PaymentState = IDLE_PAYMENT_STATE;
+  cancellationState: CancellationState = IDLE_CANCELLATION_STATE;
   amountReceived = 0;
   selectedPaymentMethod: PaymentMethod | null = null;
 
   constructor(
     private readonly saleApi: SaleApiService,
     private readonly changeDetector: ChangeDetectorRef
-  ) {}
+  ) {
+    this.activeSaleExpiry$
+      .pipe(
+        switchMap((sale) => {
+          if (sale === null || sale.status !== 'PENDING') {
+            return NEVER;
+          }
+
+          const expiresAt = Date.parse(sale.expiresAt);
+          return Number.isFinite(expiresAt)
+            ? timer(Math.max(0, expiresAt - Date.now()))
+            : NEVER;
+        }),
+        takeUntil(this.destroyed$)
+      )
+      .subscribe(() => this.cancelActiveSale('expiry'));
+  }
 
   get isLoading(): boolean {
     return this.saleState.status === 'loading';
@@ -100,6 +127,10 @@ export class PosComponent implements OnDestroy {
 
   get isPaymentSubmitting(): boolean {
     return this.paymentState.status === 'submitting';
+  }
+
+  get isCancellationSubmitting(): boolean {
+    return this.cancellationState.status === 'submitting';
   }
 
   get activeSale(): ActiveSaleViewModel | null {
@@ -115,13 +146,27 @@ export class PosComponent implements OnDestroy {
   }
 
   get canSubmitProductCode(): boolean {
-    return !this.isLoading && this.productCodeControl.valid;
+    if (this.isLoading) {
+      return false;
+    }
+
+    if (this.retryableCreateSaleAttempt !== null) {
+      return (
+        this.productCodeControl.value.trim() ===
+        this.retryableCreateSaleAttempt.productCode
+      );
+    }
+
+    return this.productCodeControl.valid;
   }
 
   get canReset(): boolean {
     return (
       !this.isLoading &&
       !this.isPaymentSubmitting &&
+      !this.isCancellationSubmitting &&
+      this.retryableCreateSaleAttempt === null &&
+      this.retryablePaymentAttempt === null &&
       (this.saleState.status !== 'ready' ||
         this.productCodeControl.value.length > 0)
     );
@@ -132,6 +177,8 @@ export class PosComponent implements OnDestroy {
       this.saleState.status === 'active' &&
       this.saleState.activeSale.status === 'PENDING' &&
       !this.isPaymentSubmitting &&
+      this.cancellationState.status === 'idle' &&
+      !this.saleUnavailable &&
       this.retryablePaymentAttempt === null
     );
   }
@@ -163,6 +210,48 @@ export class PosComponent implements OnDestroy {
     return this.paymentState.error;
   }
 
+  get cancellationError(): CancelSaleErrorViewModel | null {
+    return this.cancellationState.error;
+  }
+
+  get transactionActionLabel(): string {
+    if (this.isCancellationSubmitting) {
+      return 'กำลังยกเลิกรายการขาย…';
+    }
+
+    if (this.saleUnavailable) {
+      return 'เริ่มรายการใหม่';
+    }
+
+    if (this.activeSale?.status === 'PENDING') {
+      return this.cancellationState.status === 'error'
+        ? 'ลองยกเลิกรายการขายอีกครั้ง'
+        : 'ยกเลิกรายการขาย';
+    }
+
+    return this.saleState.status === 'ready'
+      ? 'ล้างข้อมูล'
+      : 'เริ่มรายการใหม่';
+  }
+
+  get saleStatusMessage(): string | null {
+    if (this.saleUnavailable) {
+      return 'ไม่พบรายการขายนี้ในระบบ กรุณาเริ่มรายการใหม่';
+    }
+
+    if (this.activeSale?.status === 'PAID') {
+      return 'รายการขายนี้ชำระเงินแล้ว ไม่สามารถทำรายการซ้ำได้';
+    }
+
+    if (this.activeSale?.status === 'CANCELLED') {
+      return this.cancellationState.reason === 'user'
+        ? 'ยกเลิกรายการขายเรียบร้อยแล้ว'
+        : 'รายการขายหมดอายุหรือถูกยกเลิกแล้ว กรุณาเริ่มรายการใหม่';
+    }
+
+    return null;
+  }
+
   get completedCashPayment(): CashPaymentResponse | null {
     const payment = this.paymentState.payment;
     return payment?.payment_method === 'CASH' ? payment : null;
@@ -178,20 +267,31 @@ export class PosComponent implements OnDestroy {
       case 'loading':
         return 'Loading product';
       case 'active':
+        if (this.isCancellationSubmitting) {
+          return 'กำลังยกเลิกรายการขาย';
+        }
+        if (this.saleState.activeSale.status === 'CANCELLED') {
+          return this.cancellationState.reason === 'user'
+            ? 'ยกเลิกรายการขายแล้ว'
+            : 'รายการขายหมดอายุ';
+        }
         if (this.isPaymentSubmitting) {
-          return 'Processing payment';
+          return 'กำลังดำเนินการชำระเงิน';
         }
         if (this.paymentState.status === 'paid') {
-          return 'Payment complete';
+          return 'ชำระเงินสำเร็จ';
+        }
+        if (this.saleState.activeSale.status === 'PAID') {
+          return 'ชำระเงินแล้ว';
         }
         if (this.paymentState.status === 'expired') {
-          return 'Sale expired';
+          return 'รายการขายหมดอายุ';
         }
-        return 'Sale ready for payment';
+        return 'พร้อมรับชำระเงิน';
       case 'error':
-        return 'Ready to retry';
+        return 'พร้อมลองอีกครั้ง';
       default:
-        return 'Ready for a new sale';
+        return 'พร้อมสร้างรายการขายใหม่';
     }
   }
 
@@ -209,7 +309,10 @@ export class PosComponent implements OnDestroy {
       return;
     }
 
-    this.selectedPaymentMethod = 'CASH';
+    if (this.selectedPaymentMethod !== 'CASH') {
+      this.selectedPaymentMethod = 'CASH';
+      this.paymentState = IDLE_PAYMENT_STATE;
+    }
   }
 
   selectQrPayment(): void {
@@ -217,7 +320,10 @@ export class PosComponent implements OnDestroy {
       return;
     }
 
-    this.selectedPaymentMethod = 'QR_PAYMENT';
+    if (this.selectedPaymentMethod !== 'QR_PAYMENT') {
+      this.selectedPaymentMethod = 'QR_PAYMENT';
+      this.paymentState = IDLE_PAYMENT_STATE;
+    }
   }
 
   confirmCashPayment(): void {
@@ -267,12 +373,15 @@ export class PosComponent implements OnDestroy {
       .subscribe({
         next: (response) => {
           this.retryableCreateSaleAttempt = null;
+          const activeSale = this.toActiveSale(response);
           this.saleState = {
             status: 'active',
-            activeSale: this.toActiveSale(response),
+            activeSale,
             submittedProductCode: productCode,
             error: null
           };
+          this.productCodeControl.disable({ emitEvent: false });
+          this.activeSaleExpiry$.next(activeSale);
           this.changeDetector.markForCheck();
         },
         error: (error: unknown) => {
@@ -286,9 +395,11 @@ export class PosComponent implements OnDestroy {
             status: 'error',
             activeSale: null,
             submittedProductCode: productCode,
-            error: this.toSaleApiError(error)
+            error: mapCreateSaleError(error)
           };
-          this.productCodeControl.enable({ emitEvent: false });
+          if (this.retryableCreateSaleAttempt === null) {
+            this.productCodeControl.enable({ emitEvent: false });
+          }
           this.changeDetector.markForCheck();
         }
       });
@@ -299,14 +410,33 @@ export class PosComponent implements OnDestroy {
       return;
     }
 
+    if (this.activeSale?.status === 'PENDING' && !this.saleUnavailable) {
+      const reason =
+        this.cancellationState.status === 'error'
+          ? this.cancellationState.reason
+          : 'user';
+      this.cancelActiveSale(reason);
+      return;
+    }
+
+    this.clearTransaction();
+  }
+
+  private clearTransaction(): void {
+    this.activeSaleExpiry$.next(null);
+
     this.retryableCreateSaleAttempt = null;
     this.retryablePaymentAttempt = null;
+    this.retryableCancellationAttempt = null;
+    this.saleUnavailable = false;
     this.saleState = READY_STATE;
     this.paymentState = IDLE_PAYMENT_STATE;
+    this.cancellationState = IDLE_CANCELLATION_STATE;
     this.amountReceived = 0;
     this.selectedPaymentMethod = null;
     this.productCodeControl.reset('', { emitEvent: false });
     this.productCodeControl.enable({ emitEvent: false });
+    this.changeDetector.markForCheck();
   }
 
   ngOnDestroy(): void {
@@ -328,17 +458,6 @@ export class PosComponent implements OnDestroy {
     };
   }
 
-  private toSaleApiError(error: unknown): CreateSaleErrorViewModel {
-    if (
-      error instanceof HttpErrorResponse &&
-      this.isSaleApiErrorResponse(error.error)
-    ) {
-      return error.error.error;
-    }
-
-    return DEFAULT_CREATE_SALE_ERROR;
-  }
-
   private isAmbiguousCreateSaleFailure(error: unknown): boolean {
     return this.isAmbiguousRequestFailure(error);
   }
@@ -348,7 +467,9 @@ export class PosComponent implements OnDestroy {
       this.saleState.status === 'active' &&
       this.saleState.activeSale.status === 'PENDING' &&
       this.selectedPaymentMethod === 'CASH' &&
-      !this.isPaymentSubmitting
+      !this.isPaymentSubmitting &&
+      this.cancellationState.status === 'idle' &&
+      !this.saleUnavailable
     );
   }
 
@@ -357,7 +478,9 @@ export class PosComponent implements OnDestroy {
       this.saleState.status === 'active' &&
       this.saleState.activeSale.status === 'PENDING' &&
       this.selectedPaymentMethod === 'QR_PAYMENT' &&
-      !this.isPaymentSubmitting
+      !this.isPaymentSubmitting &&
+      this.cancellationState.status === 'idle' &&
+      !this.saleUnavailable
     );
   }
 
@@ -412,6 +535,7 @@ export class PosComponent implements OnDestroy {
             };
             this.updateActiveSaleStatus('CANCELLED');
           }
+          this.activeSaleExpiry$.next(null);
           this.changeDetector.markForCheck();
         },
         error: (error: unknown) => {
@@ -426,8 +550,84 @@ export class PosComponent implements OnDestroy {
           this.paymentState = {
             status: 'error',
             payment: null,
-            error: this.toPaymentApiError(error)
+            error: mapPaymentError(error)
           };
+          this.synchronizeSaleAfterPaymentError(this.paymentState.error.code);
+          this.changeDetector.markForCheck();
+        }
+      });
+  }
+
+  private cancelActiveSale(reason: SaleCancellationReason): void {
+    const activeSale = this.activeSale;
+    if (
+      activeSale === null ||
+      activeSale.status !== 'PENDING' ||
+      this.saleUnavailable ||
+      this.isPaymentSubmitting ||
+      this.retryablePaymentAttempt !== null ||
+      this.isCancellationSubmitting
+    ) {
+      return;
+    }
+
+    const retryKey =
+      this.retryableCancellationAttempt?.saleId === activeSale.saleId &&
+      this.retryableCancellationAttempt.reason === reason
+        ? this.retryableCancellationAttempt.idempotencyKey
+        : undefined;
+    const operation =
+      retryKey === undefined
+        ? this.saleApi.cancelSale(activeSale.saleId)
+        : this.saleApi.cancelSale(activeSale.saleId, retryKey);
+
+    this.retryableCancellationAttempt = null;
+    this.cancellationState = {
+      status: 'submitting',
+      reason,
+      error: null
+    };
+
+    operation.response$
+      .pipe(takeUntil(this.destroyed$))
+      .subscribe({
+        next: () => {
+          this.retryableCancellationAttempt = null;
+          this.cancellationState = {
+            status: 'cancelled',
+            reason,
+            error: null
+          };
+          this.paymentState =
+            reason === 'expiry'
+              ? {
+                  status: 'expired',
+                  payment: null,
+                  error: EXPIRED_SALE_ERROR
+                }
+              : IDLE_PAYMENT_STATE;
+          this.selectedPaymentMethod = null;
+          this.amountReceived = 0;
+          this.updateActiveSaleStatus('CANCELLED');
+          this.activeSaleExpiry$.next(null);
+          this.changeDetector.markForCheck();
+        },
+        error: (error: unknown) => {
+          if (this.isAmbiguousRequestFailure(error)) {
+            this.retryableCancellationAttempt = {
+              saleId: activeSale.saleId,
+              reason,
+              idempotencyKey: operation.idempotencyKey
+            };
+          }
+
+          const cancellationError = mapCancellationError(error);
+          this.cancellationState = {
+            status: 'error',
+            reason,
+            error: cancellationError
+          };
+          this.synchronizeSaleAfterCancellationError(cancellationError.code);
           this.changeDetector.markForCheck();
         }
       });
@@ -457,33 +657,32 @@ export class PosComponent implements OnDestroy {
     );
   }
 
-  private toPaymentApiError(error: unknown): PaymentErrorViewModel {
-    if (
-      error instanceof HttpErrorResponse &&
-      this.isPaymentApiErrorResponse(error.error)
-    ) {
-      return error.error.error;
+  private synchronizeSaleAfterPaymentError(code: string): void {
+    if (code === 'SALE_ALREADY_PAID') {
+      this.retryablePaymentAttempt = null;
+      this.updateActiveSaleStatus('PAID');
+      this.activeSaleExpiry$.next(null);
+    } else if (code === 'SALE_CANCELLED') {
+      this.retryablePaymentAttempt = null;
+      this.updateActiveSaleStatus('CANCELLED');
+      this.activeSaleExpiry$.next(null);
+    } else if (code === 'SALE_NOT_FOUND') {
+      this.retryablePaymentAttempt = null;
+      this.saleUnavailable = true;
+      this.activeSaleExpiry$.next(null);
     }
-
-    return DEFAULT_PAYMENT_ERROR;
   }
 
-  private isPaymentApiErrorResponse(
-    value: unknown
-  ): value is PaymentApiErrorResponse {
-    if (typeof value !== 'object' || value === null || !('error' in value)) {
-      return false;
+  private synchronizeSaleAfterCancellationError(code: string): void {
+    if (code === 'SALE_ALREADY_PAID') {
+      this.retryableCancellationAttempt = null;
+      this.updateActiveSaleStatus('PAID');
+      this.activeSaleExpiry$.next(null);
+    } else if (code === 'SALE_NOT_FOUND') {
+      this.retryableCancellationAttempt = null;
+      this.saleUnavailable = true;
+      this.activeSaleExpiry$.next(null);
     }
-
-    const apiError = (value as { readonly error: unknown }).error;
-    return (
-      typeof apiError === 'object' &&
-      apiError !== null &&
-      'code' in apiError &&
-      isPaymentApiErrorCode((apiError as { readonly code: unknown }).code) &&
-      'message' in apiError &&
-      typeof (apiError as { readonly message: unknown }).message === 'string'
-    );
   }
 
   private updateActiveSaleStatus(status: 'PAID' | 'CANCELLED'): void {
@@ -500,21 +699,4 @@ export class PosComponent implements OnDestroy {
     };
   }
 
-  private isSaleApiErrorResponse(value: unknown): value is SaleApiErrorResponse {
-    if (typeof value !== 'object' || value === null || !('error' in value)) {
-      return false;
-    }
-
-    const apiError = (value as { readonly error: unknown }).error;
-    return (
-      typeof apiError === 'object' &&
-      apiError !== null &&
-      'code' in apiError &&
-      isCreateSaleApiErrorCode(
-        (apiError as { readonly code: unknown }).code
-      ) &&
-      'message' in apiError &&
-      typeof (apiError as { readonly message: unknown }).message === 'string'
-    );
-  }
 }
