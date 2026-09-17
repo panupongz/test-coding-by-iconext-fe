@@ -28,6 +28,30 @@
 6. Keep the Thank You state for approximately 5 seconds, then clear the transaction and reset the POS for the next sale.
 7. FE must handle product-not-found, API/business errors, invalid states, and expired sale/session scenarios cleanly.
 
+## FE ↔ BE API Integration Contract
+
+The Backend implementation on `panupongz/test-coding-by-iconext-be` branch `feature/implement` is the API Source of Truth. The BE mounts its API router under `/api/v1` and currently exposes **3 FE-facing sale endpoints**. FE must integrate these exact routes and must not invent, rename, split, or require additional BE endpoints unless the BE contract is explicitly changed later.
+
+| # | Method | Endpoint | Purpose | Primary FE Task(s) |
+|---|---|---|---|---|
+| 1 | `POST` | `/api/v1/sales` | Create a sale from the entered product code | T-003, verified again in T-008 |
+| 2 | `POST` | `/api/v1/sales/:sale_id/payment` | Submit payment; Cash and QR use the same payment endpoint | T-004, T-005, verified again in T-008 |
+| 3 | `POST` | `/api/v1/sales/:sale_id/cancel` | Cancel the active sale when cancellation/expiry recovery requires the BE cancel flow | T-006, verified again in T-008 |
+
+### API Integration Rules
+
+- The API base URL must come from Angular environment/configuration; do not hard-code host/port in components.
+- Keep `/api/v1` and endpoint paths centralized in the FE API/service layer where practical.
+- Components must not call `HttpClient` directly when the call belongs to the reusable sale/payment API service.
+- Define explicit TypeScript request/response/error types from the actual BE contract. Do not guess fields that BE does not return.
+- `:sale_id` must use the sale identifier returned/maintained from the active BE sale flow.
+- Cash and QR are **payment methods on the same payment endpoint**, not separate BE endpoints.
+- For QR confirmation, FE sends `amount_received = total` according to the agreed UI flow and actual BE payment contract.
+- FE must preserve BE status codes, validation/business-error semantics, and sale-state rules when mapping them to user-facing states.
+- Cancellation/expiry handling must use `POST /api/v1/sales/:sale_id/cancel` when the BE flow requires an explicit cancellation; FE must not simulate a successful BE cancellation locally.
+- T-008 must integration-test all 3 endpoints used by the completed FE flow, including relevant success and negative paths.
+- If implementation discovers that the current BE contract differs from this section, stop and verify the BE Source of Truth before changing FE behavior; do not silently compensate with an invented FE contract.
+
 ## Engineering Standard — Angular v14 / Senior Developer Level
 
 These rules apply to **every task**, not only T-001.
@@ -155,6 +179,7 @@ Establish and verify the Angular v14 frontend foundation required for the POS im
 - [ ] API base configuration is environment-driven.
 - [ ] Core FE structure follows the Senior Developer standards above.
 - [ ] Architecture/file responsibilities follow the Angular v14 Architecture & File Responsibility rules above.
+- [ ] API configuration is ready for the `/api/v1` BE contract without hard-coded host/port in components.
 - [ ] No unnecessary dependency or architecture rewrite is introduced.
 - [ ] Relevant build/tests pass.
 - [ ] Implementation prompt is preserved verbatim.
@@ -199,18 +224,18 @@ Build the main POS UI and interaction shell used by the sale flow.
 Connect product-code submission to the existing BE create-sale flow.
 
 ### Scope
-- Call the existing create-sale API according to the BE contract.
+- Integrate `POST /api/v1/sales` according to the actual BE contract.
 - Enforce the FE assumption from the Source of Truth: `1 Sale = 1 Product = quantity 1`.
 - Map typed API responses into FE state/view models.
 - Display product and total/price returned by BE.
 - Prevent duplicate create-sale submissions while a request is active.
 
 ### Acceptance Criteria
-- [ ] Valid product-code submission creates exactly one sale through BE.
+- [ ] Valid product-code submission calls `POST /api/v1/sales` and creates exactly one sale through BE.
 - [ ] FE does not implement multi-product or quantity-changing behavior.
 - [ ] Product and price/total come from the BE response/source of truth.
 - [ ] Duplicate submission is guarded appropriately.
-- [ ] Request/response/error types are explicit.
+- [ ] Request/response/error types are explicit and match the actual BE contract.
 - [ ] Relevant tests pass.
 - [ ] Implementation prompt is preserved verbatim.
 - [ ] Senior Review / Final Gate passes.
@@ -230,6 +255,7 @@ Implement the cash-payment interaction and submit it through the existing BE pay
 - Accumulated `amount_received`.
 - Confirm-payment eligibility.
 - Change calculation/display.
+- Integrate `POST /api/v1/sales/:sale_id/payment` for cash payment.
 - Payment submission and duplicate-action protection.
 
 ### Acceptance Criteria
@@ -237,7 +263,7 @@ Implement the cash-payment interaction and submit it through the existing BE pay
 - [ ] Received amount accumulates deterministically.
 - [ ] Confirm is unavailable while `amount_received < total`.
 - [ ] Change is displayed correctly when `amount_received > total`.
-- [ ] Cash payment uses the existing BE contract without changing BE.
+- [ ] Cash payment uses `POST /api/v1/sales/:sale_id/payment` and the existing BE contract without changing BE.
 - [ ] Duplicate payment submission is guarded.
 - [ ] Relevant unit/integration tests pass.
 - [ ] Implementation prompt is preserved verbatim.
@@ -257,13 +283,15 @@ Implement QR payment using the existing BE payment contract.
 - QR payment selection/state.
 - QR presentation based on available contract/data.
 - Confirmation behavior.
+- Integrate the same `POST /api/v1/sales/:sale_id/payment` endpoint used by Cash.
 - Submit `amount_received = total` when confirming QR payment.
 - Loading/duplicate-action protection.
 
 ### Acceptance Criteria
 - [ ] QR payment UI is shown when QR is selected.
-- [ ] Confirmation submits according to the existing BE contract.
+- [ ] QR confirmation calls `POST /api/v1/sales/:sale_id/payment` according to the existing BE contract.
 - [ ] `amount_received` equals the sale `total` for QR confirmation.
+- [ ] FE does not invent a separate QR payment endpoint.
 - [ ] Duplicate payment submission is guarded.
 - [ ] FE does not fabricate unsupported BE behavior/data.
 - [ ] Relevant tests pass.
@@ -278,12 +306,13 @@ Implement QR payment using the existing BE payment contract.
 **Status:** `TODO`
 
 ### Goal
-Make the POS flow resilient to expected API, business, invalid-state, not-found, and expiry scenarios.
+Make the POS flow resilient to expected API, business, invalid-state, not-found, cancellation, and expiry scenarios.
 
 ### Scope
 - Product not found.
 - Create-sale/payment API errors.
 - Invalid or unexpected sale/payment state.
+- Integrate `POST /api/v1/sales/:sale_id/cancel` where the BE cancellation/expiry flow requires explicit cancellation.
 - Expired sale/session handling according to BE behavior.
 - Recoverable UI/reset behavior.
 - Safe user-facing error messages.
@@ -291,7 +320,8 @@ Make the POS flow resilient to expected API, business, invalid-state, not-found,
 ### Acceptance Criteria
 - [ ] Product-not-found has a clear recoverable UI state.
 - [ ] API/business errors do not leave the POS stuck in an inconsistent state.
-- [ ] Expiry is handled according to the BE contract/state.
+- [ ] Explicit cancellation uses `POST /api/v1/sales/:sale_id/cancel` according to the BE contract.
+- [ ] Expiry is handled according to the BE contract/state and does not fake a successful cancellation locally.
 - [ ] Retry/reset behavior cannot accidentally duplicate a transaction.
 - [ ] Technical details are not unnecessarily exposed to the user.
 - [ ] Relevant negative-path tests pass.
@@ -338,19 +368,23 @@ Validate the complete FE flow against the existing BE contract and close integra
 
 ### Scope
 - End-to-end integration of T-001 through T-007.
+- Verify all 3 FE-facing BE endpoints: create sale, payment, and cancel.
 - Create-sale → payment → PAID flow.
-- Cash and QR paths.
-- Error/expiry/reset paths.
+- Cash and QR paths through the shared payment endpoint.
+- Error/cancel/expiry/reset paths.
 - Thank You popup and automatic reset.
 - Regression/build/test verification.
 
 ### Acceptance Criteria
+- [ ] `POST /api/v1/sales` is integrated and verified.
+- [ ] `POST /api/v1/sales/:sale_id/payment` is integrated and verified for both Cash and QR.
+- [ ] `POST /api/v1/sales/:sale_id/cancel` is integrated and verified for the applicable cancellation/expiry flow.
 - [ ] Product code → Create Sale → product/price → payment works as designed.
 - [ ] Cash path works, including repeated denomination buttons, eligibility, and change.
 - [ ] QR path works with `amount_received = total`.
 - [ ] `PAID` displays the Thank You popup.
 - [ ] Thank You state remains for approximately 5 seconds and then resets the POS.
-- [ ] Product-not-found/error/expiry paths are covered.
+- [ ] Product-not-found/error/cancel/expiry paths are covered.
 - [ ] No FE behavior requires a BE contract change.
 - [ ] Relevant automated tests pass.
 - [ ] Production/release build passes where supported by the repository.
@@ -376,4 +410,4 @@ Validate the complete FE flow against the existing BE contract and close integra
 
 ## Completion Rule
 
-The FE implementation is complete only when T-001 through T-008 are `DONE`, all required prompt audits are preserved, relevant tests/builds pass, the final integration flow matches the BE Source of Truth, and no unresolved Final Gate findings remain.
+The FE implementation is complete only when T-001 through T-008 are `DONE`, all required prompt audits are preserved, relevant tests/builds pass, all 3 FE-facing BE endpoints required by the flow are integrated and verified, the final integration flow matches the BE Source of Truth, and no unresolved Final Gate findings remain.
